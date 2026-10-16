@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" href="data:," />
+<title>Dirt Line — dig it, shape it, ride it</title>
+<link rel="stylesheet" href="style.css" />
+<script>
+  // error overlay: catches init crashes that would otherwise vanish on reload
+  window.onerror = function (msg, url, line, col, err) {
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed;left:0;right:0;top:0;background:#b3261e;color:#fff;padding:12px 14px;font:12px/1.4 monospace;z-index:9999;white-space:pre-wrap';
+    box.textContent = 'ERROR: ' + msg + '\n' + (url || '') + ':' + line + ':' + col + (err && err.stack ? '\n' + err.stack : '');
+    document.body.appendChild(box);
+  };
+  window.addEventListener('unhandledrejection', e => window.onerror('unhandled promise: ' + e.reason, '', 0, 0, e.reason));
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud">
+  <div class="panel" id="hudTopLeft">
+    <div id="hudToolRow">
+      <span id="hudTool">Spade</span>
+      <span id="hudMode">WORK</span>
+    </div>
+    <div class="hudLine"><span>Brush</span><b id="hudBrush">0.55 m</b></div>
+    <div class="hudLine"><span>Stamina</span><b id="hudStamina">100%</b></div>
+    <div class="bar"><i id="barStamina" style="width:100%"></i></div>
+    <div class="hudLine" style="margin-top:6px"><span>Load <span id="loadText">0 / 130 L</span></span><b id="hudAction">—</b></div>
+    <div class="bar"><i id="barLoad" style="width:0"></i></div>
+    <div id="hudSoil">looking at the sky</div>
+    <div id="hudFeature">no plan yet — press P</div>
+    <div id="statLine">dug 0.00 m³ · placed 0.00 m³</div>
+  </div>
+
+  <div id="hudTopRight">
+    <canvas id="minimap" width="428" height="428"></canvas>
+    <div class="panel" id="target">
+      <div id="targetName">Lip · 12 m</div>
+      <div class="trow"><span>height</span><b id="tH">0.00 / 1.50 m</b></div>
+      <div class="bar"><i id="tHBar" style="width:0"></i></div>
+      <div class="trow" style="margin-top:6px"><span>radius</span><b id="tR">0.00 / 2.30 m</b></div>
+      <div class="bar"><i id="tRBar" style="width:0"></i></div>
+    </div>
+  </div>
+
+  <div class="panel" id="barrowBox">
+    <div id="barrowText">wheelbarrow — 0 L</div>
+    <div class="bar" style="margin-top:5px"><i id="barrowBar" style="width:0;background:#c4552c"></i></div>
+  </div>
+
+  <div id="hudBottomLeft" class="plan-hide">
+    <div class="panel">
+      <div><span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> walk · <span class="kbd">Shift</span> run · <span class="kbd">Ctrl</span> crouch · <span class="kbd">Space</span> hop</div>
+      <div style="margin-top:5px"><span class="kbd">1</span>-<span class="kbd">4</span> spade / flat head / pick axe / rake · <span class="kbd">Q</span><span class="kbd">R</span> cycle</div>
+      <div style="margin-top:5px"><span class="kbd">LMB</span> work the ground · <span class="kbd">RMB</span> slap / pack / chip</div>
+      <div style="margin-top:5px"><span class="kbd">Shift</span>+<span class="kbd">LMB</span> shave a flat face · wheel brush size</div>
+      <div style="margin-top:5px"><span class="kbd">E</span> place dirt · <span class="kbd">B</span> wheelbarrow · <span class="kbd">P</span> plan · <span class="kbd">Tab</span> plan sheet</div>
+      <div style="margin-top:5px;color:#7d8b96"><span class="kbd">H</span> help · <span class="kbd">M</span> map · <span class="kbd">V</span> plan volumes · <span class="kbd">K</span> save · <span class="kbd">L</span> load</div>
+    </div>
+  </div>
+
+  <div id="crosshair"></div>
+  <div class="panel" id="hint">Click to lock the mouse and start digging</div>
+  <div id="toast"></div>
+</div>
+
+<div id="planUI">
+  <div id="planModeTag">PLAN MODE — lay out the line before you dig</div>
+  <div id="planPalette"></div>
+  <div id="planInfo"></div>
+</div>
+
+<!-- help -->
+<div class="overlay" id="help">
+  <div class="card">
+    <h2>How to build a line</h2>
+    <div class="cols">
+      <div>
+        <h3>1 · Plan first</h3>
+        <ul>
+          <li><b>P</b> — overhead plan view. Click the ground to drop lips, landings, rollers, tables, berms and dirt holes.</li>
+          <li>Wheel = radius · <b>Shift</b>+wheel = height · <b>Q</b>/<b>R</b> rotate the take-off heading.</li>
+          <li><b>RMB</b> deletes a feature. <b>Tab</b> opens the plan sheet — keep it up while you dig.</li>
+          <li>Planned features show as ghost rings and wireframes in the world and on the minimap.</li>
+        </ul>
+        <h3 style="margin-top:14px">2 · Dig</h3>
+        <ul>
+          <li>Spade digs soft ground. Pick axe breaks hard or already-packed dirt (and loosens it).</li>
+          <li>Dig anywhere you like — in-situ volume really leaves the ground.</li>
+          <li>Spoil goes in your hands (130 L), or into the wheelbarrow (<b>B</b> sets it down, 300 L).</li>
+        </ul>
+      </div>
+      <div>
+        <h3>3 · Place and pack</h3>
+        <ul>
+          <li><b>E</b> toggles PLACE DIRT. Wheel controls the dump radius — down to 0.15 m for precise shaping.</li>
+          <li>LMB pours, RMB trickles, <b>Shift</b> feathers it. With the barrow within reach you empty that instead.</li>
+          <li>Poured dirt is <i>loose</i> — it slumps under gravity to its angle of repose (~35°).</li>
+          <li>Pack it with the flat head (preferred) or the back of the spade. Packed faces hold 60°+.</li>
+          <li><b>Shift</b>+<b>LMB</b> with flat head / spade shaves a clean flat cut — lips and landings.</li>
+          <li>Rake levels and grooms, dragging high spots into hollows.</li>
+          <li>Work slowly and you can hold a real lip: dig → dump → slap → shave → pack.</li>
+        </ul>
+        <h3 style="margin-top:14px">Reading the dirt</h3>
+        <ul>
+          <li>HUD shows packing %, face angle and whether it will slump.</li>
+          <li>Marks tell the story: smooth sheen = flat head, ridges = spade, grooves = rake, pocks = pick.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="btns"><button onclick="document.getElementById('help').classList.remove('show')">Close (H)</button></div>
+  </div>
+</div>
+
+<!-- plan sheet -->
+<div class="overlay" id="planSheet">
+  <div class="card">
+    <h2>Plan sheet — reference while building</h2>
+    <table>
+      <thead><tr><th>#</th><th>Feature</th><th>Height built / plan</th><th>Radius built / plan</th><th>Progress</th></tr></thead>
+      <tbody id="planRows"></tbody>
+    </table>
+    <p class="muted" style="margin:12px 0 0">Tab to close. Green rows are built to plan.</p>
+  </div>
+</div>
+
+<!-- intro -->
+<div class="overlay show" id="intro">
+  <div class="card">
+    <h1>DIRT <span>LINE</span></h1>
+    <p>A first-person trail-building sim. Walk the woods at 6 ft, plan a jump line, then dig it out of the ground — real spoil volumes, real angle of repose, and dirt that only stays where you pack it.</p>
+    <div class="cols">
+      <div>
+        <h3>Plan</h3>
+        <ul>
+          <li><b>P</b> — plan view: lay out the whole line first</li>
+          <li>Wheel radius · Shift+wheel height · Q/R heading</li>
+          <li>Tab — plan sheet stays with you while you dig</li>
+        </ul>
+        <h3 style="margin-top:12px">Dig</h3>
+        <ul>
+          <li>Spade soft ground, pick axe hard ground</li>
+          <li>Carry spoil or shovel it into the barrow</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Shape</h3>
+        <ul>
+          <li><b>E</b> place dirt — wheel sets the dump radius</li>
+          <li>Loose dirt slumps; pack it flat head to hold a face</li>
+          <li>Shift+LMB shaves a clean flat cut</li>
+        </ul>
+        <h3 style="margin-top:12px">Explore</h3>
+        <ul>
+          <li>Procedural woods, room left for lines</li>
+          <li>H for the full controls list</li>
+        </ul>
+      </div>
+    </div>
+    <div class="btns">
+      <button class="primary" id="begin">Start digging</button>
+      <button id="resume" style="display:none">Load saved build</button>
+      <button id="newWorld">New world</button>
+    </div>
+  </div>
+</div>
+
+<div id="loading">
+  <div style="font-size:22px;font-weight:700;letter-spacing:2px">DIRT LINE</div>
+  <div id="loadingText">loading…</div>
+  <div id="loadingTrack"><i id="loadingBar"></i></div>
+</div>
+
+<script type="module">
+  // three.js as a real ES module (no deprecated UMD build), exposed as a global
+  // for the app modules that follow.
+  import * as THREE from './three.module.js';
+  window.THREE = THREE;
+</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
