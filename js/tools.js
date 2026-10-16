@@ -35,6 +35,12 @@ export const TOOLS = [
   },
 ];
 
+// Where along its own shaft the hand grips, per tool. Most tools are modelled
+// with the origin already at a sensible grip; the pick axe has the head AT the
+// origin, so its mesh slides down its own axis until the hand is out at the end
+// of the handle — which is how you actually hold a pick, head away from you.
+const GRIP_SLIDE = { pickaxe: -0.72, rake: -0.14 };
+
 // A tool as a mesh group (used for the held view model and for tools left
 // standing in the dirt as scenery).
 export function buildToolMesh(id, materials, opts = {}) {
@@ -43,6 +49,13 @@ export function buildToolMesh(id, materials, opts = {}) {
 }
 
 // First-person view model: a gloved hand holding the tool, swinging on use.
+//
+// Model convention (js/models-tools.js): origin at the grip, +Y along the shaft
+// toward the handle end, -Y toward the head. Held the way a person actually
+// carries a tool — shaft running diagonally across the view with the head out in
+// front and down where you can see it working, handle heading back off the
+// right edge. `pose` holds every number so the hold can be tuned without
+// hunting through the animation.
 export class ViewModel {
   constructor(camera, materials) {
     this.materials = materials;
@@ -54,6 +67,7 @@ export class ViewModel {
 
     for (const id of Object.keys(TOOL_MODELS)) {
       const g = buildToolMesh(id, materials, { shadows: false });
+      g.position.y = GRIP_SLIDE[id] || 0;
       g.visible = false;
       g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
       this.groups[id] = g;
@@ -65,9 +79,14 @@ export class ViewModel {
     this.pivot.add(hand);
     this.hand = hand;
 
-    this.root.position.set(0.36, -0.36, -0.82);
-    this.root.rotation.set(0.04, -0.44, 0.14);
-    this.root.scale.setScalar(0.66);
+    // grip point in camera space, rig orientation, and the rest tilt of the tool
+    this.pose = {
+      hold: new THREE.Vector3(0.28, -0.16, -0.74),
+      rot: new THREE.Euler(0.0, 0.02, 0.0),
+      rest: new THREE.Euler(0.72, 0.04, -0.72),
+      scale: 0.64,
+    };
+    this.applyPose();
     camera.add(this.root);
 
     this.swing = 0;
@@ -75,6 +94,13 @@ export class ViewModel {
     this.bob = 0;
     this.kick = 0;
     this.setTool('spade');
+  }
+
+  applyPose() {
+    const p = this.pose;
+    this.root.position.copy(p.hold);
+    this.root.rotation.copy(p.rot);
+    this.root.scale.setScalar(p.scale);
   }
 
   setTool(id) {
@@ -100,33 +126,39 @@ export class ViewModel {
       if (this.swing < 0.05) this.swing = 0;
     }
     const s = this.swing;
-    // rest pose ~0.10 (tool carried upright); the swing drives it down and
-    // forward into the ground, then it recovers to rest.
+    const rest = this.pose.rest;
+    // at rest the tool is carried head-forward-down; the swing drives the head
+    // down and forward into the dirt ahead, then it recovers to rest.
     const a = Math.sin(s * Math.PI);
-    let rx = 0.10, rz = 0, ty = 0, tz = 0;
+    let rx = rest.x, ry = rest.y, rz = rest.z, ty = 0, tz = 0;
     if (this.toolId === 'rake') {
+      // tines sweep side to side and drag back toward the player
       const sw = Math.sin(s * Math.PI * 2);
-      rz = sw * 0.5;
-      tz = -Math.abs(sw) * 0.08;
-      rx = 0.16 - Math.abs(sw) * 0.10;
+      rz = rest.z + sw * 0.34;
+      tz = -Math.abs(sw) * 0.10;
+      rx = rest.x - Math.abs(sw) * 0.16;
+      ry = rest.y + sw * 0.10;
     } else if (this.toolId === 'flathead') {
-      rx = 0.10 - a * 0.72;
-      ty = -a * 0.13;
-      tz = -a * 0.06;
+      rx = rest.x - a * 0.34;
+      ry = rest.y + a * 0.10;
+      ty = -a * 0.08;
+      tz = -a * 0.08;
     } else if (this.toolId === 'pickaxe') {
-      rx = 0.12 - a * 1.05;
-      tz = -a * 0.12;
-      ty = -a * 0.05;
+      // over-the-shoulder swing: head lifts up and back, then drives down
+      rx = rest.x - a * 0.56;
+      ry = rest.y + a * 0.16;
+      ty = -a * 0.07;
+      tz = -a * 0.11;
     } else {
-      rx = 0.10 - a * 0.95;
-      tz = -a * 0.14;
-      ty = -a * 0.04;
+      rx = rest.x - a * 0.44;
+      ry = rest.y + a * 0.12;
+      ty = -a * 0.08;
+      tz = -a * 0.10;
     }
-    this.pivot.rotation.x = rx;
-    this.pivot.rotation.z = rz;
+    this.pivot.rotation.set(rx, ry, rz);
     this.pivot.position.set(swayX, ty, tz);
 
-    this.root.position.x = 0.36 + swayX * 0.4;
-    this.root.position.y = -0.36 + swayY;
+    this.root.position.x = this.pose.hold.x + swayX * 0.4;
+    this.root.position.y = this.pose.hold.y + swayY;
   }
 }

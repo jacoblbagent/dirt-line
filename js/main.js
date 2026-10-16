@@ -2,7 +2,7 @@
 // Bootstrap: scene, procedural world, digger, tools, planning, main loop.
 import { CFG, MK, clamp } from './config.js';
 import { Terrain } from './terrain.js';
-import { TOOLS, ViewModel } from './tools.js';
+import { TOOLS, ViewModel, TOOL_TIP_Y } from './tools.js';
 import { Player } from './player.js';
 import { Plan, BuildZone, drawMinimap, FEATURE_TYPES, setShowVolume } from './plan.js';
 import { buildLogs, buildStaging, buildRocks } from './props.js';
@@ -690,6 +690,8 @@ window.__app = {
   get renderer() { return renderer; },
   get camera() { return camera; },
   get planCam() { return planCam; },
+  get vm() { return vm; },
+  get TOOL_TIP_Y() { return TOOL_TIP_Y; },
   get mode() { return state.mode; },
   save, load, buildWorld, marchTerrain,
 };

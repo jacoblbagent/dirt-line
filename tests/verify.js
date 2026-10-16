@@ -497,6 +497,40 @@ const MEASURE = `(t, x, z, litres) => {
   check('1-4 still pick tools (the only tool keys left)', toolKey === 2 && keys.before !== toolKey,
     `toolIdx ${keys.before} → ${toolKey}`);
   await page.keyboard.press('Digit1');
+
+  // ---------- the tools are held the right way up ----------
+  // Regression guard: the head of every tool must project inside the viewport,
+  // not hang off the bottom of the screen with only the handle showing.
+  const held = await page.evaluate(() => {
+    const A = window.__app, THREE = A.THREE;
+    const ids = ['spade', 'flathead', 'pickaxe', 'rake'];
+    const out = {};
+    for (let i = 0; i < ids.length; i++) {
+      A.player.toolIdx = i;
+      A.vm.setTool(ids[i]);
+      A.vm.update(1 / 60, { speed: 0, working: false, period: 0.5 });
+      A.camera.updateMatrixWorld(true);
+      const g = A.vm.groups[ids[i]];
+      const tip = g.localToWorld(new THREE.Vector3(0, A.TOOL_TIP_Y[ids[i]], 0));
+      const n = tip.clone().project(A.camera);
+      // and the hand itself, which should sit low-right but still on screen
+      const hand = A.vm.hand.localToWorld(new THREE.Vector3(0, 0, 0)).project(A.camera);
+      out[ids[i]] = {
+        x: +n.x.toFixed(3), y: +n.y.toFixed(3), z: +n.z.toFixed(3),
+        hx: +hand.x.toFixed(3), hy: +hand.y.toFixed(3),
+      };
+    }
+    A.player.toolIdx = 0;
+    A.vm.setTool('spade');
+    return out;
+  });
+  const onScreen = Object.entries(held).filter(([, v]) => Math.abs(v.x) < 0.98 && Math.abs(v.y) < 0.98 && v.z < 1);
+  check('every tool head sits inside the view where the player can see it',
+    onScreen.length === 4,
+    Object.entries(held).map(([k, v]) => `${k} (${v.x}, ${v.y})`).join(' · '));
+  const handOnScreen = Object.entries(held).every(([, v]) => Math.abs(v.hx) < 0.98 && v.hy < 0 && Math.abs(v.hy) < 0.98);
+  check('the gloved hand is held low-right and on screen', handOnScreen,
+    Object.entries(held).map(([k, v]) => `${k} hand (${v.hx}, ${v.hy})`).join(' · '));
   // nothing else on the keyboard should do anything any more
   const dead = await page.evaluate(() => {
     const A = window.__app;
