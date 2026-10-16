@@ -32,7 +32,7 @@
     <div class="hudLine" style="margin-top:6px"><span>Load <span id="loadText">0 / 130 L</span></span><b id="hudAction">—</b></div>
     <div class="bar"><i id="barLoad" style="width:0"></i></div>
     <div id="hudSoil">looking at the sky</div>
-    <div id="hudFeature">no plan yet — press P</div>
+    <div id="hudFeature">no plan yet — click Plan</div>
     <div id="statLine">dug 0.00 m³ · placed 0.00 m³</div>
   </div>
 
@@ -54,17 +54,26 @@
 
   <div id="hudBottomLeft" class="plan-hide">
     <div class="panel">
-      <div><span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> walk · <span class="kbd">Shift</span> run · <span class="kbd">Ctrl</span> crouch · <span class="kbd">Space</span> hop</div>
-      <div style="margin-top:5px"><span class="kbd">1</span>-<span class="kbd">4</span> spade / flat head / pick axe / rake · <span class="kbd">Q</span><span class="kbd">R</span> cycle</div>
-      <div style="margin-top:5px"><span class="kbd">LMB</span> work the ground · <span class="kbd">RMB</span> slap / pack / chip</div>
-      <div style="margin-top:5px"><span class="kbd">Shift</span>+<span class="kbd">LMB</span> shave a flat face · wheel brush size</div>
-      <div style="margin-top:5px"><span class="kbd">E</span> place dirt · <span class="kbd">B</span> wheelbarrow · <span class="kbd">P</span> plan · <span class="kbd">Tab</span> plan sheet</div>
-      <div style="margin-top:5px;color:#7d8b96"><span class="kbd">H</span> help · <span class="kbd">M</span> map · <span class="kbd">V</span> plan volumes · <span class="kbd">K</span> save · <span class="kbd">L</span> load</div>
+      <div><span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> walk · <span class="kbd">Shift</span> run · <span class="kbd">Space</span> hop</div>
+      <div style="margin-top:5px"><span class="kbd">1</span><span class="kbd">2</span><span class="kbd">3</span><span class="kbd">4</span> spade · flat head · pick axe · rake</div>
+      <div style="margin-top:5px"><span class="kbd">LMB</span> work the ground · <span class="kbd">RMB</span> place dirt</div>
+      <div style="margin-top:5px"><span class="kbd">Shift</span>+<span class="kbd">LMB</span> shave a face · wheel size</div>
+      <div style="margin-top:5px;color:#7d8b96"><span class="kbd">Esc</span> free the mouse for the buttons below</div>
     </div>
   </div>
 
+  <div id="hudBar">
+    <button class="hbtn" id="btnPlan">Plan</button>
+    <button class="hbtn" id="btnSheet">Plan sheet</button>
+    <button class="hbtn" id="btnBarrow">Barrow</button>
+    <button class="hbtn on" id="btnMap">Map</button>
+    <button class="hbtn" id="btnSave">Save</button>
+    <button class="hbtn" id="btnLoad">Load</button>
+    <button class="hbtn" id="btnHelp">Help</button>
+  </div>
+
   <div id="crosshair"></div>
-  <div class="panel" id="hint">Click to lock the mouse and start digging</div>
+  <div class="panel" id="hint">Click to lock the mouse and start digging · Esc frees it for the buttons</div>
   <div id="toast"></div>
 </div>
 
@@ -72,6 +81,11 @@
   <div id="planModeTag">PLAN MODE — lay out the line before you dig</div>
   <div id="planPalette"></div>
   <div id="planInfo"></div>
+  <div id="planCtl">
+    <button class="hbtn" id="btnTurnL">◀ heading</button>
+    <button class="hbtn" id="btnTurnR">heading ▶</button>
+    <button class="hbtn primary" id="btnPlanDone">Done — back to digging</button>
+  </div>
 </div>
 
 <!-- help -->
@@ -82,37 +96,37 @@
       <div>
         <h3>1 · Plan first</h3>
         <ul>
-          <li><b>P</b> — overhead plan view. Click the ground to drop lips, landings, rollers, tables, berms and dirt holes.</li>
-          <li>Wheel = radius · <b>Shift</b>+wheel = height · <b>Q</b>/<b>R</b> rotate the take-off heading.</li>
-          <li><b>RMB</b> deletes a feature. <b>Tab</b> opens the plan sheet — keep it up while you dig.</li>
-          <li>Planned features show as ghost rings and wireframes in the world and on the minimap.</li>
+          <li>Click <b>Plan</b> (buttons, bottom centre) for the overhead view. Click the ground to drop lips, landings, rollers, tables, berms and dirt holes.</li>
+          <li>Wheel = radius · <b>Shift</b>+wheel = height · the ◀ ▶ buttons rotate the take-off heading.</li>
+          <li><b>RMB</b> deletes a feature. <b>Plan sheet</b> keeps a live progress list with you while you dig.</li>
+          <li>Planned features show as ghost shapes in the world and on the minimap.</li>
         </ul>
         <h3 style="margin-top:14px">2 · Dig</h3>
         <ul>
-          <li>Spade digs soft ground. Pick axe breaks hard or already-packed dirt (and loosens it).</li>
+          <li><b>LMB</b> works the ground with the tool in hand. Spade cuts firm dirt, pick axe breaks hard or packed dirt, rake levels and grooms.</li>
           <li>Dig anywhere you like — in-situ volume really leaves the ground.</li>
-          <li>Spoil goes in your hands (130 L), or into the wheelbarrow (<b>B</b> sets it down, 300 L).</li>
+          <li>Spoil goes in your hands (130 L), or into the wheelbarrow (300 L) when you are stood next to it.</li>
         </ul>
       </div>
       <div>
         <h3>3 · Place and pack</h3>
         <ul>
-          <li><b>E</b> toggles PLACE DIRT. Wheel controls the dump radius — down to 0.15 m for precise shaping.</li>
-          <li>LMB pours, RMB trickles, <b>Shift</b> feathers it. With the barrow within reach you empty that instead.</li>
+          <li><b>RMB</b> places dirt exactly where you are looking. Wheel sets the radius — down to 0.22 m for precise shaping. <b>Shift</b>+RMB trickles it out.</li>
+          <li>With the barrow in reach, RMB tips that out instead of your hands.</li>
           <li>Poured dirt is <i>loose</i> — it slumps under gravity to its angle of repose (~35°).</li>
-          <li>Pack it with the flat head (preferred) or the back of the spade. Packed faces hold 60°+.</li>
-          <li><b>Shift</b>+<b>LMB</b> with flat head / spade shaves a clean flat cut — lips and landings.</li>
-          <li>Rake levels and grooms, dragging high spots into hollows.</li>
-          <li>Work slowly and you can hold a real lip: dig → dump → slap → shave → pack.</li>
+          <li><b>LMB</b> with the flat head packs it — preferred, and leaves a smooth sheen. The back of the spade also slaps loose dirt down, leaving ridge marks.</li>
+          <li><b>Shift</b>+<b>LMB</b> shaves a clean flat cut — lips and landing faces.</li>
+          <li>Work slowly and you can hold a real lip: dig → place → slap → shave → pack.</li>
         </ul>
         <h3 style="margin-top:14px">Reading the dirt</h3>
         <ul>
           <li>HUD shows packing %, face angle and whether it will slump.</li>
           <li>Marks tell the story: smooth sheen = flat head, ridges = spade, grooves = rake, pocks = pick.</li>
+          <li>Everything else is a button on the bar at the bottom. <b>Esc</b> frees the mouse to click them.</li>
         </ul>
       </div>
     </div>
-    <div class="btns"><button onclick="document.getElementById('help').classList.remove('show')">Close (H)</button></div>
+    <div class="btns"><button onclick="document.getElementById('help').classList.remove('show')">Close</button></div>
   </div>
 </div>
 
@@ -124,7 +138,8 @@
       <thead><tr><th>#</th><th>Feature</th><th>Height built / plan</th><th>Radius built / plan</th><th>Progress</th></tr></thead>
       <tbody id="planRows"></tbody>
     </table>
-    <p class="muted" style="margin:12px 0 0">Tab to close. Green rows are built to plan.</p>
+    <p class="muted" style="margin:12px 0 0">Green rows are built to plan. Leave this open while you dig.</p>
+    <div class="btns" style="margin-top:12px"><button id="btnSheetClose">Close</button></div>
   </div>
 </div>
 
@@ -137,12 +152,13 @@
       <div>
         <h3>Plan</h3>
         <ul>
-          <li><b>P</b> — plan view: lay out the whole line first</li>
-          <li>Wheel radius · Shift+wheel height · Q/R heading</li>
-          <li>Tab — plan sheet stays with you while you dig</li>
+          <li><b>Plan</b> button — lay out the whole line first</li>
+          <li>Wheel radius · Shift+wheel height · ◀ ▶ heading</li>
+          <li>Plan sheet stays with you while you dig</li>
         </ul>
         <h3 style="margin-top:12px">Dig</h3>
         <ul>
+          <li><b>LMB</b> digs with the tool in hand</li>
           <li>Spade soft ground, pick axe hard ground</li>
           <li>Carry spoil or shovel it into the barrow</li>
         </ul>
@@ -150,14 +166,15 @@
       <div>
         <h3>Shape</h3>
         <ul>
-          <li><b>E</b> place dirt — wheel sets the dump radius</li>
+          <li><b>RMB</b> places dirt — wheel sets the radius</li>
           <li>Loose dirt slumps; pack it flat head to hold a face</li>
           <li>Shift+LMB shaves a clean flat cut</li>
         </ul>
         <h3 style="margin-top:12px">Explore</h3>
         <ul>
           <li>Procedural woods, room left for lines</li>
-          <li>H for the full controls list</li>
+          <li>WASD + Space to move, 1–4 for tools</li>
+          <li>Esc frees the mouse for the button bar</li>
         </ul>
       </div>
     </div>

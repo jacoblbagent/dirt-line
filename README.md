@@ -61,39 +61,50 @@ per-object vertex/NaN report, and is what the screenshots above were taken from.
 
 ## What you do
 
-1. **Plan the line first** — `P` opens an overhead plan view. Click the ground to
-   drop lips, landings, rollers, tables, berms and dirt holes. Wheel = radius,
-   `Shift`+wheel = height, `Q`/`R` = take-off heading, `RMB` deletes.
-2. **Dig** — spade for soft ground, pick axe for hard or already-packed ground
-   (it also loosens soil so later digging goes easier). Dirt leaves the ground:
-   the hole you dig *is* the dirt you build with (in-situ volume, 25% bulking).
+1. **Plan the line first** — the **Plan** button opens an overhead plan view. Click
+   the ground to drop lips, landings, rollers, tables, berms and dirt holes. Wheel =
+   radius, `Shift`+wheel = height, the ◀ ▶ buttons = take-off heading, `RMB` deletes.
+2. **Dig** — `LMB` works the ground with whatever tool is in hand. Spade for firm
+   ground, pick axe for hard or already-packed ground (it also loosens soil so later
+   digging goes easier). Dirt leaves the ground: the hole you dig *is* the dirt you
+   build with (in-situ volume, 25% bulking).
 3. **Haul** — spoil goes in your hands (160 L) or gets shovelled into the
-   wheelbarrow (`B` places it, 400 L). Digging next to the barrow loads it.
-4. **Place** — `E` toggles PLACE DIRT. The dump radius is fully yours: wheel from
-   a 3.2 m blanket down to a 0.15 m pinch. `LMB` pours, `RMB` trickles, `Shift`
-   feathers it even finer. Aim at a jump and it lands on the jump.
+   wheelbarrow (the **Barrow** button places it, 400 L). Digging next to the barrow
+   loads it.
+4. **Place** — `RMB` puts dirt exactly where you are looking, with any tool in hand.
+   The dump radius is fully yours: wheel from a 3.2 m blanket down to a 0.22 m
+   pinch. `Shift`+`RMB` trickles it out. Aim at a jump and it lands on the jump.
 5. **Pack** — poured dirt is *loose*: it slumps under gravity to its angle of
-   repose (~38°) and keeps falling until it stops. Slap it flat with the flat head
-   (preferred) or the back of the spade and it holds 60°+. Firm ground is pale and
-   dry-looking; loose spoil is dark and muddy.
-6. **Shave** — `Shift`+`LMB` with the flat head takes a clean flat cut off a lip or
-   a landing face: a thin, even plane of dirt for precise adjustment.
-7. **Rake** — levels and grooms, dragging high spots into hollows.
+   repose (~38°) and keeps falling until it stops. `LMB` with the flat head packs it
+   (preferred, smooth sheen); the back of the spade slaps it down too, leaving ridge
+   marks. Packed faces hold 60°+. Firm ground is pale and dry-looking; loose spoil is
+   dark and muddy.
+6. **Shave** — `Shift`+`LMB` takes a clean flat cut off a lip or a landing face: a
+   thin, even plane of dirt for precise adjustment.
+7. **Rake** — `LMB` levels and grooms, dragging high spots into hollows.
 
 ## Controls
 
-| Key | Action |
+Three rules and a small keyboard — everything else is a button.
+
+| Input | Action |
 |---|---|
 | `W A S D` | walk (`Shift` run, `Ctrl` crouch, `Space` hop) |
-| mouse | look (click once to lock the pointer) |
-| `1 2 3 4` | spade / flat head / pick axe / rake (`Q`,`R` cycle) |
-| `LMB` / `RMB` | tool primary / secondary (dig·pack, slap·chip, groom·spread) |
+| mouse | look (click once to lock the pointer, `Esc` to free it) |
+| `1 2 3 4` | spade / flat head / pick axe / rake |
+| `LMB` | work the ground with the tool in hand |
+| `RMB` | place dirt where you are looking (trickle with `Shift`) |
 | `Shift`+`LMB` | shave a flat face |
-| wheel | brush size (or dump radius in place mode) |
-| `E` | toggle PLACE DIRT |
-| `B` | place / pick up / tip the wheelbarrow |
-| `P` | plan mode · `Tab` plan sheet |
-| `H` help · `M` map · `V` plan volumes · `K` save · `L` load |
+| wheel | radius — brush size and dump radius together |
+| **buttons** | Plan · Plan sheet · Barrow · Map · Save · Load · Help |
+
+That is the whole keyboard. Plan mode, the plan sheet, the wheelbarrow, the map,
+saving and help all live on the button bar at the bottom of the screen; press `Esc`
+to release the pointer, click what you want, then click the world to start digging
+again. The plan sheet is click-through, so you can leave it open as a reference
+while you work the dirt.
+
+![Controls](docs/screenshot-controls.png)
 
 ## The dirt model
 

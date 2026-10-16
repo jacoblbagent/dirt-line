@@ -49,12 +49,18 @@ export const UI = {
     this._tt = setTimeout(() => this.el.toast.classList.remove('show'), t * 1000);
   },
 
+  // what LMB does with the tool in hand — one line, no modes to remember
+  verb(toolId) {
+    return toolId === 'flathead' ? 'pack' : toolId === 'pickaxe' ? 'break'
+      : toolId === 'rake' ? 'level' : 'dig / slap';
+  },
+
   update(state) {
     const { player, planProgress, terrain, mode } = state;
     this.el.tool.textContent = player.tool.name;
-    this.el.mode.textContent = player.mode === 'pour' ? 'PLACE DIRT' : 'WORK';
-    this.el.mode.classList.toggle('pour', player.mode === 'pour');
-    this.el.brush.textContent = (player.mode === 'pour' ? player.pourRadius : player.brushRadius).toFixed(2) + ' m';
+    this.el.mode.textContent = `LMB ${this.verb(player.tool.id)} · RMB place dirt`;
+    this.el.mode.classList.toggle('pour', player.action === 'place dirt' || player.action === 'trickle');
+    this.el.brush.textContent = player.brushRadius.toFixed(2) + ' m';
     this.el.action.textContent = player.working ? player.action : '—';
 
     const aim = player.aim;
@@ -109,7 +115,7 @@ export const UI = {
       this.el.feature.textContent = `${best.name}: ${(Math.min(best.hProg, 1) * 100).toFixed(0)}% built`;
     } else {
       this.el.target.classList.remove('show');
-      this.el.feature.textContent = planProgress.length ? `${planProgress.length} planned features` : 'no plan yet — press P';
+      this.el.feature.textContent = planProgress.length ? `${planProgress.length} planned features` : 'no plan yet — click Plan';
     }
     this.el.stats.textContent =
       `dug ${(player.stats.litresDug / 1000).toFixed(2)} m³ · placed ${(player.stats.litresPlaced / 1000).toFixed(2)} m³`;
@@ -117,7 +123,7 @@ export const UI = {
 
   renderSheet(progress) {
     if (!progress.length) {
-      this.el.planRows.innerHTML = `<tr><td colspan="5" class="muted">No features planned. Press <b>P</b>, then click the ground in plan view.</td></tr>`;
+      this.el.planRows.innerHTML = `<tr><td colspan="5" class="muted">No features planned. Click <b>Plan</b>, then click the ground in plan view.</td></tr>`;
       return;
     }
     this.el.planRows.innerHTML = progress.map((f, i) => {

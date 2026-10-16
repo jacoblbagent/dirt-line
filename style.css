@@ -67,7 +67,7 @@ html, body {
 .bar i.done { background: var(--good); }
 
 /* bottom-left: controls summary */
-#hudBottomLeft { position: fixed; left: 12px; bottom: 12px; width: 250px; font-size: 11px; color: var(--dim); }
+#hudBottomLeft { position: fixed; left: 12px; bottom: 12px; width: 310px; font-size: 11px; color: var(--dim); }
 #hudBottomLeft b { color: var(--ink); font-weight: 600; }
 .kbd {
   display: inline-block; min-width: 16px; text-align: center;
@@ -117,8 +117,13 @@ html, body {
 .overlay {
   position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
   background: rgba(6,9,12,.72); backdrop-filter: blur(3px); z-index: 20;
+  /* click-through: the card takes the clicks, the rest of the screen stays usable
+     so the plan sheet can sit open while you keep digging */
+  pointer-events: none;
 }
 .overlay.show { display: flex; }
+.overlay .card { pointer-events: auto; }
+#intro, #help { pointer-events: auto; }
 
 #intro .card {
   width: min(680px, 90vw); background: rgba(14,17,20,.94);
@@ -147,8 +152,8 @@ button.primary:hover { background: #d87446; }
   background: rgba(14,17,20,.95); border: 1px solid var(--line);
   border-radius: var(--r); padding: 20px 22px;
 }
-#planSheet { align-items: flex-start; justify-content: flex-end; }
-#planSheet .card { width: min(520px, 92vw); margin: 72px 16px 16px; }
+#planSheet { align-items: flex-start; justify-content: flex-end; background: none; backdrop-filter: none; }
+#planSheet .card { width: min(520px, 92vw); margin: 244px 16px 16px; }
 #help h2, #planSheet h2 { margin: 0 0 10px; font-size: 17px; }
 table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.07); }
@@ -186,6 +191,26 @@ body.planmode #hud { display: none; }
   font-size: 11px; font-weight: 700; letter-spacing: 1.2px;
 }
 #hudBottomLeft.plan { display: none; }
+
+/* bottom-centre: the whole menu, mouse-only (Esc frees the pointer to reach it) */
+#hudBar {
+  position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+  display: flex; gap: 6px; z-index: 12;
+}
+.hbtn {
+  font: inherit; font-size: 11px; font-weight: 600; letter-spacing: .3px;
+  color: var(--ink); background: rgba(16,20,24,.82);
+  border: 1px solid var(--line); border-radius: var(--r);
+  padding: 7px 11px; cursor: pointer; pointer-events: auto;
+}
+.hbtn:hover { background: rgba(255,255,255,.14); }
+.hbtn.on { border-color: rgba(140,208,255,.55); color: #d6ecff; }
+.hbtn.primary { background: #c4663c; border-color: #e08050; color: #fff; }
+.hbtn.primary:hover { background: #d87446; }
+#planCtl {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+  display: flex; gap: 8px; z-index: 12;
+}
 
 /* loading */
 #loading {

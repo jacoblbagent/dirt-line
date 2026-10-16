@@ -23,9 +23,8 @@ export class Player {
     this.load = 0;           // litres of loose spoil carried
     this.loadMax = CFG.PLAYER_LOAD;
     this.toolIdx = 0;
-    this.brushRadius = 0.55; // working brush (dig / pack / rake / shave)
-    this.pourRadius = 0.9;   // deposit brush — fully player controlled
-    this.mode = 'work';      // 'work' | 'pour'
+    this.brushRadius = 0.55; // working brush — also drives the dump radius
+    this.pourRadius = 0.77;  // deposit brush, derived from the working brush
     this.crouch = false;
     this.bob = 0;
     this.aim = { hit: false, point: new THREE.Vector3(), normal: new THREE.Vector3(0, 1, 0), dist: 0 };
@@ -67,6 +66,13 @@ export class Player {
   }
 
   get tool() { return TOOLS[this.toolIdx]; }
+
+  // one wheel drives both the working brush and the (slightly wider) dump brush,
+  // so there is nothing extra to press for precise placement
+  setRadius(v) {
+    this.brushRadius = clamp(v, 0.22, 2.6);
+    this.pourRadius = clamp(v * 1.4, 0.25, 3.2);
+  }
 
   barrowDist() {
     if (!this.barrow.placed) return Infinity;
@@ -233,6 +239,10 @@ export class Player {
   }
 
   // ---------- work ----------
+  // Three rules, no modes:
+  //   LMB        work the ground with the current tool
+  //   RMB        place the dirt you carry (or tip the barrow out)
+  //   Shift+LMB  shave a clean flat face; Shift+RMB trickles
   useTools(dt, input, sfx) {
     this.working = false;
     if (!this.aim.hit) return;
@@ -241,40 +251,34 @@ export class Player {
     const x = this.aim.point.x, z = this.aim.point.z;
     const angle = this.yaw;
     TL.angle = angle;
+    const fine = !!input.keys['ShiftLeft'] || !!input.keys['ShiftRight'];
 
-    if (this.mode === 'pour') {
-      if (input.lmb || input.rmb) {
-        const src = this.barrow.placed && this.barrowDist() < 3.4 && this.barrow.fill > 0.5
-          ? 'barrow' : 'load';
-        const have = src === 'barrow' ? this.barrow.fill : this.load;
-        if (have < 0.4) {
-          this.say('No dirt to place — dig some first');
-        } else {
-          let rate = CFG.POUR_RATE * (src === 'barrow' ? 1.9 : 1.0);
-          if (input.rmb) rate *= CFG.TRICKLE;
-          if (input.keys['ShiftLeft']) rate *= 0.35;
-          let litres = rate * dt;
-          litres = Math.min(litres, have);
-          const used = t.pour(x, z, this.pourRadius, litres, { mark: MK.LOOSE, angle });
-          const spent = used; // litres actually placed (conserved)
-          if (src === 'barrow') this.barrow.fill -= spent; else this.load -= spent;
-          this.stats.litresPlaced += spent;
-          this.working = true;
-          this.action = 'pour';
-          if (sfx) sfx.pour(dt);
-        }
+    // ---- RMB, whatever tool is in hand: put dirt where you are looking ----
+    if (input.rmb) {
+      const src = this.barrow.placed && this.barrowDist() < 3.4 && this.barrow.fill > 0.5
+        ? 'barrow' : 'load';
+      const have = src === 'barrow' ? this.barrow.fill : this.load;
+      if (have < 0.4) {
+        this.say('Nothing to place — dig some dirt first');
+      } else {
+        let rate = CFG.POUR_RATE * (src === 'barrow' ? 1.9 : 1.0);
+        if (fine) rate *= CFG.TRICKLE;
+        const litres = Math.min(rate * dt, have);
+        const used = t.pour(x, z, this.pourRadius, litres, { mark: MK.LOOSE, angle });
+        if (src === 'barrow') this.barrow.fill -= used; else this.load -= used;
+        this.stats.litresPlaced += used;
+        this.working = true;
+        this.action = fine ? 'trickle' : 'place dirt';
+        if (sfx) sfx.pour(dt);
       }
       return;
     }
 
-    const shaveMode = !!input.keys['ShiftLeft'];
-    const primary = input.lmb, secondary = input.rmb;
-    if (!primary && !secondary) return;
+    if (!input.lmb) return;
 
-    // ---- shift + LMB: precision flat cut (shave the face / lip) ----
-    if (shaveMode && primary && (TL.id === 'flathead' || TL.id === 'spade' || TL.id === 'rake')) {
-      const trim = 0.055;
-      const litres = t.shave(x, z, this.brushRadius, trim, TL);
+    // ---- Shift + LMB: precision flat cut — lips, landings, face trimming ----
+    if (fine && TL.id !== 'pickaxe') {
+      const litres = t.shave(x, z, this.brushRadius, 0.055, TL);
       const nearBarrow = this.barrow.placed && this.barrowDist() < 3.0 && this.barrow.fill < CFG.BARROW_MAX;
       if (nearBarrow) this.barrow.fill = Math.min(CFG.BARROW_MAX, this.barrow.fill + litres);
       else this.load = Math.min(this.loadMax, this.load + litres);
@@ -284,54 +288,35 @@ export class Player {
       return;
     }
 
-    // ---- tool specific primary / secondary ----
+    // ---- LMB: the tool's own job ----
     if (TL.id === 'spade') {
-      if (primary) {
-        if (!this.roomFor()) { this.say('Hands full — dump your load in the barrow or on the jump'); }
-        else {
-          const l = t.dig(x, z, this.brushRadius, TL, dt);
-          this.takeDirt(l);
-          this.working = true; this.action = 'dig';
-          if (sfx && l > 0.02) sfx.dig(dt);
-        }
-      } else if (secondary) {
-        const any = t.pack(x, z, this.brushRadius * 1.05, Object.assign({}, TL, { packRate: TL.packRate, packMark: MK.SPADE }), dt);
+      // firm ground cuts; loose dirt gets slapped down with the back of the blade
+      const loose = t.packedAt(x, z) < 120;
+      if (loose) {
+        const any = t.pack(x, z, this.brushRadius * 1.05, Object.assign({}, TL, { packMark: MK.SPADE }), dt);
         if (any) { this.working = true; this.action = 'slap'; this.stats.litresPacked += dt * 12; if (sfx) sfx.pack(dt); }
+      } else if (!this.roomFor()) {
+        this.say('Hands full — place the dirt or drop it in the barrow');
+      } else {
+        const l = t.dig(x, z, this.brushRadius, TL, dt);
+        this.takeDirt(l);
+        this.working = true; this.action = 'dig';
+        if (sfx && l > 0.02) sfx.dig(dt);
       }
     } else if (TL.id === 'flathead') {
-      if (primary || secondary) {
-        const r = secondary ? this.brushRadius * 0.7 : this.brushRadius;
-        const rate = secondary ? TL.packRate * 1.35 : TL.packRate;
-        const any = t.pack(x, z, r, Object.assign({}, TL, { packRate: rate }), dt);
-        if (any) { this.working = true; this.action = 'pack'; this.stats.litresPacked += dt * 14; if (sfx) sfx.pack(dt); }
-      }
+      const any = t.pack(x, z, this.brushRadius, TL, dt);
+      if (any) { this.working = true; this.action = 'pack'; this.stats.litresPacked += dt * 14; if (sfx) sfx.pack(dt); }
     } else if (TL.id === 'pickaxe') {
-      if (primary || secondary) {
-        const tool = secondary
-          ? Object.assign({}, TL, { power: TL.power * 1.25, loosen: TL.loosen * 1.4 })
-          : TL;
-        if (!this.roomFor()) { this.say('Hands full — dump your load first'); }
-        else {
-          const l = t.dig(x, z, this.brushRadius * (secondary ? 0.85 : 1.0), tool, dt);
-          this.takeDirt(l);
-          this.working = true; this.action = 'pick';
-          if (sfx && l > 0.02) sfx.pick(dt);
-        }
+      if (!this.roomFor()) { this.say('Hands full — place the dirt first'); }
+      else {
+        const l = t.dig(x, z, this.brushRadius, TL, dt);
+        this.takeDirt(l);
+        this.working = true; this.action = 'break';
+        if (sfx && l > 0.02) sfx.pick(dt);
       }
     } else if (TL.id === 'rake') {
-      if (primary) {
-        const any = t.rake(x, z, this.brushRadius * 1.25, dt);
-        if (any) { this.working = true; this.action = 'rake'; if (sfx && Math.random() < 0.12) sfx.rake(); }
-      } else if (secondary) {
-        // spread a little carried spoil while grooming
-        if (this.load > 0.5) {
-          const litres = Math.min(this.load, 21 * dt);
-          const used = t.pour(x, z, this.brushRadius * 1.6, litres, { mark: MK.RAKE, angle });
-          this.load -= used;
-          this.stats.litresPlaced += used;
-          this.working = true; this.action = 'spread';
-        } else this.say('Nothing to spread — dig some dirt first');
-      }
+      const any = t.rake(x, z, this.brushRadius * 1.25, dt);
+      if (any) { this.working = true; this.action = 'rake'; if (sfx && Math.random() < 0.12) sfx.rake(); }
     }
   }
 
@@ -369,7 +354,7 @@ export class Player {
         this.say(`Tipped the barrow out — ${(used).toFixed(0)} L placed`);
       } else {
         this.barrow.placed = false;
-        this.say('Wheelbarrow picked up (press B to set it down)');
+        this.say('Wheelbarrow picked up — use the Barrow button to set it down');
       }
     } else if (!this.barrow.placed) {
       const p = this.aim.hit ? this.aim.point : this.pos;
@@ -385,13 +370,5 @@ export class Player {
       this.say('Walk up to the wheelbarrow first');
     }
     this.updateBarrowMesh();
-  }
-
-  cycleMode() {
-    this.mode = this.mode === 'work' ? 'pour' : 'work';
-    this.say(this.mode === 'pour'
-      ? 'PLACE DIRT — wheel: dump radius, LMB pour, RMB trickle, Shift fine'
-      : `${this.tool.name} — wheel: brush size`);
-    return this.mode;
   }
 }

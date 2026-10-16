@@ -40,6 +40,18 @@ const MEASURE = `(t, x, z, litres) => {
   page.on('requestfailed', r => logs.push(`[REQFAIL] ${r.url()} ${r.failure() && r.failure().errorText}`));
 
   await page.goto(URL, { waitUntil: 'load' });
+  // Playwright's locator actionability check gets confused by #hud's
+  // pointer-events:none, so drive the buttons with real mouse clicks at their
+  // centre — which is what a user actually does, and what the app must handle.
+  const clickSel = async (sel) => {
+    const box = await page.$eval(sel, el => {
+      const r = el.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    });
+    await page.mouse.click(box.x, box.y);
+    await page.waitForTimeout(180);
+  };
+
   await page.waitForFunction(() => !!(window.__app && window.__app.terrain && window.__app.player), null,
     { timeout: 60000 }).catch(() => {});
   await page.waitForTimeout(2000);
@@ -326,7 +338,7 @@ const MEASURE = `(t, x, z, litres) => {
   const loop = await page.evaluate(() => {
     const A = window.__app, t = A.terrain, p = A.player;
     const x = 6, z = 6;
-    p.load = 0; p.mode = 'work'; p.stamina = 100;
+    p.load = 0; p.stamina = 100;
     p.pos.set(x, t.heightAt(x, z), z);
     p.yaw = Math.PI; p.pitch = -1.3;
     p.brushRadius = 0.6;
@@ -342,17 +354,19 @@ const MEASURE = `(t, x, z, litres) => {
       const b2 = t.h0[t.idx(Math.round(t.colOf(hx)), Math.round(t.rowOf(hz)))];
       hole = Math.max(hole, b2 - t.heightAt(hx, hz));
     }
-    p.mode = 'pour'; p.pourRadius = 0.6;
+    p.pourRadius = 0.6;
     const tx = x + 3, tz = z + 3;
     p.pos.set(tx, t.heightAt(tx, tz), tz);
     const before = t.heightAt(tx, tz);
     const base = t.h0[t.idx(t.colOf(tx), t.rowOf(tz))];
     p.aim.point.set(tx, t.heightAt(tx, tz), tz); p.aim.hit = true;
+    // RMB is the one and only "place dirt" control now
+    inp.lmb = false; inp.rmb = true;
     for (let i = 0; i < 400; i++) p.useTools(1 / 60, inp, null);
     for (let i = 0; i < 60; i++) t.slump(20);
     t.refreshGeometry();
     const left = p.load;
-    inp.lmb = false;
+    inp.rmb = false;
     return { dug, left, hole, mound: t.heightAt(tx, tz), base, before, stats: p.stats.litresDug };
   });
   check('digging fills the digger\'s load', loop.dug > 30, loop.dug.toFixed(1) + ' L');
@@ -367,7 +381,7 @@ const MEASURE = `(t, x, z, litres) => {
     const b = p.barrow;
     b.placed = true; b.x = 10; b.z = 30; b.fill = 0;
     p.updateBarrowMesh();
-    p.load = 0; p.mode = 'work'; p.stamina = 100;
+    p.load = 0; p.stamina = 100;
     p.pos.set(10, t.heightAt(10, 30), 30);
     p.yaw = Math.PI; p.pitch = -1.3;
     const inp = A.state.input;
@@ -398,8 +412,10 @@ const MEASURE = `(t, x, z, litres) => {
   check('tipping the barrow dumps its load where you aim',
     barrow.tipped < 5 && barrow.mound > 0.05, `${barrow.tipped.toFixed(1)} L left, +${barrow.mound.toFixed(2)} m`);
 
-  // ---------- plan mode camera + render ----------
-  await page.keyboard.press('KeyP');
+  // ---------- plan mode camera + render (mouse-driven: the Plan button) ----------
+  // the intro overlay is never clicked away in this harness, so clear it first
+  await page.evaluate(() => document.getElementById('intro').classList.remove('show'));
+  await clickSel('#btnPlan');
   await page.waitForTimeout(900);
   const planMode = await page.evaluate(() => ({
     mode: window.__app.mode,
@@ -408,14 +424,14 @@ const MEASURE = `(t, x, z, litres) => {
     uiVisible: document.getElementById('planUI').classList.contains('show'),
     palette: document.querySelectorAll('#planPalette .pt').length,
   }));
-  check('P opens plan mode with the overhead camera',
+  check('the Plan button opens plan mode with the overhead camera',
     planMode.mode === 'plan' && planMode.uiVisible && planMode.camY > 10 && planMode.palette === 6,
     `cam y ${planMode.camY.toFixed(0)} m, ${planMode.palette} feature types`);
   check('plan mode still renders', planMode.calls > 0, planMode.calls + ' draw calls');
-  await page.keyboard.press('KeyP');
+  await clickSel('#btnPlanDone');
   await page.waitForTimeout(500);
   const back = await page.evaluate(() => window.__app.mode);
-  check('P returns to first person', back === 'play', back);
+  check('the Done button returns to first person', back === 'play', back);
 
   // ---------- live frame loop with keyboard input ----------
   await page.evaluate(() => {
@@ -437,24 +453,67 @@ const MEASURE = `(t, x, z, litres) => {
   check('the live rAF loop walks the player with real key input', live.moved > 0.005,
     live.moved.toFixed(3) + ' m at a few fps of software raster (not a perf figure)');
 
-  // ---------- help + sheet overlays ----------
-  await page.keyboard.press('KeyH');
-  await page.keyboard.press('Tab');
-  await page.waitForTimeout(300);
+  // ---------- plan sheet + help, both driven by buttons ----------
+  // exiting plan mode re-locks the pointer; a real player presses Esc to free it
+  // for the button bar, so do exactly that before clicking
+  await page.evaluate(() => document.exitPointerLock && document.exitPointerLock());
+  await page.waitForTimeout(200);
+  await clickSel('#btnSheet');
+  await page.waitForTimeout(250);
+  const sheet = await page.evaluate(() => ({
+    shown: document.getElementById('planSheet').classList.contains('show'),
+    rows: document.querySelectorAll('#planRows tr').length,
+  }));
+  check('Plan sheet opens populated from the button', sheet.shown && sheet.rows >= 2, sheet.rows + ' rows');
+  // the sheet is click-through, so the button bar is still reachable with it open
+  await clickSel('#btnSheetClose');
+  await page.waitForTimeout(150);
+  const sheetClosed = await page.evaluate(() => document.getElementById('planSheet').classList.contains('show'));
+  check('the sheet closes again', !sheetClosed);
+
+  await clickSel('#btnHelp');
+  await page.waitForTimeout(250);
   const overlays = await page.evaluate(() => ({
     help: document.getElementById('help').classList.contains('show'),
-    sheet: document.getElementById('planSheet').classList.contains('show'),
-    rows: document.querySelectorAll('#planRows tr').length,
     hudText: document.getElementById('hudSoil').textContent,
     brush: document.getElementById('hudBrush').textContent,
+    mode: document.getElementById('hudMode').textContent,
   }));
-  check('H opens the controls list', overlays.help);
-  check('Tab opens a populated plan sheet', overlays.sheet && overlays.rows >= 2,
-    overlays.rows + ' rows');
+  check('Help opens the controls list from the button', overlays.help);
   check('HUD reports live soil state', overlays.hudText.length > 4 && overlays.brush.includes('m'),
     `soil "${overlays.hudText}" · brush ${overlays.brush}`);
+  check('HUD spells out what the two mouse buttons do', /LMB/.test(overlays.mode) && /RMB/.test(overlays.mode),
+    `"${overlays.mode}"`);
+  await clickSel('#help .btns button');
+  await page.waitForTimeout(150);
+
+  // ---------- the keyboard is only movement + tool picks ----------
+  const keys = await page.evaluate(() => {
+    const A = window.__app;
+    return { before: A.player.toolIdx };
+  });
+  await page.keyboard.press('Digit3');
+  const toolKey = await page.evaluate(() => window.__app.player.toolIdx);
+  check('1-4 still pick tools (the only tool keys left)', toolKey === 2 && keys.before !== toolKey,
+    `toolIdx ${keys.before} → ${toolKey}`);
+  await page.keyboard.press('Digit1');
+  // nothing else on the keyboard should do anything any more
+  const dead = await page.evaluate(() => {
+    const A = window.__app;
+    return { barrow: A.player.barrow.placed, mode: A.mode, help: document.getElementById('help').classList.contains('show') };
+  });
+  await page.keyboard.press('KeyB');
+  await page.keyboard.press('KeyE');
+  await page.keyboard.press('KeyP');
   await page.keyboard.press('KeyH');
-  await page.keyboard.press('Tab');
+  await page.waitForTimeout(200);
+  const after = await page.evaluate(() => {
+    const A = window.__app;
+    return { barrow: A.player.barrow.placed, mode: A.mode, help: document.getElementById('help').classList.contains('show') };
+  });
+  check('the old hotkeys (B/E/P/H) are gone — no stray key does anything',
+    after.barrow === dead.barrow && after.mode === dead.mode && after.help === dead.help,
+    `barrow ${after.barrow}, mode ${after.mode}, help ${after.help}`);
 
   // ---------- save / load round trip ----------
   const saveres = await page.evaluate(() => {

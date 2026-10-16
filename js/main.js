@@ -233,8 +233,9 @@ function updateRing() {
   if (!ringMesh) return;
   const aim = player.aim;
   const SEG = 64;
+  const placing = state.mode === 'play' && state.input.rmb;
   const r = state.mode === 'play'
-    ? (player.mode === 'pour' ? player.pourRadius : player.brushRadius) : state.planBrushR || 0;
+    ? (placing ? player.pourRadius : player.brushRadius) : state.planBrushR || 0;
   const visible = aim.hit && (state.mode === 'play');
   ringMesh.visible = visible && r > 0;
   if (!ringMesh.visible) return;
@@ -248,7 +249,7 @@ function updateRing() {
   pos.needsUpdate = true;
   ringMesh.geometry.computeBoundingSphere();
   const mat = ringMesh.material;
-  if (player.mode === 'pour') mat.color.setHex(0xffd166);
+  if (placing) mat.color.setHex(0xffd166);
   else if (player.tool.id === 'flathead') mat.color.setHex(0x9fe8ff);
   else if (player.tool.id === 'rake') mat.color.setHex(0xd8ff9f);
   else if (player.tool.id === 'pickaxe') mat.color.setHex(0xffb3a0);
@@ -310,44 +311,28 @@ function load() {
 }
 
 // ---------------------------------------------------------------- input
+// Keyboard is deliberately tiny: WASD + Space to move, 1-4 for tools.
+// Everything else lives on the on-screen buttons (Esc frees the mouse).
 function bindInput() {
   const canvas = renderer.domElement;
-  const keys = () => state.input.keys;
 
   window.addEventListener('keydown', e => {
     const k = e.code;
     state.input.keys[k] = true;
-    if (['Tab', 'Space', 'KeyP', 'KeyB', 'KeyE', 'KeyH'].includes(k)) e.preventDefault();
+    if (k === 'Tab' || k === 'Space') e.preventDefault();
 
-    if (k === 'Tab') {
-      const sheet = document.getElementById('planSheet');
-      UI.showSheet(!sheet.classList.contains('show'));
-      UI.renderSheet(plan.progress(terrain));
-    }
-    if (k === 'KeyH') { state.helpOpen = !state.helpOpen; UI.showHelp(state.helpOpen); }
-    if (k === 'KeyP') togglePlanMode();
-    if (k === 'KeyE' && state.mode === 'play') { player.cycleMode(); }
-    if (k === 'KeyB' && state.mode === 'play') player.toggleBarrow();
-    if (k === 'KeyK') save();
-    if (k === 'KeyL') load();
-    if (k === 'KeyM') state.showMinimap = !state.showMinimap;
-    if (k === 'KeyV') { state.showVolume = !state.showVolume; setShowVolume(state.showVolume); }
-    if (state.mode === 'play') {
-      if (k === 'Digit1') player.toolIdx = 0;
-      if (k === 'Digit2') player.toolIdx = 1;
-      if (k === 'Digit3') player.toolIdx = 2;
-      if (k === 'Digit4') player.toolIdx = 3;
-      if (k === 'KeyQ') player.toolIdx = (player.toolIdx + 3) % 4;
-      if (k === 'KeyR') player.toolIdx = (player.toolIdx + 1) % 4;
-      vm && vm.setTool(player.tool.id);
-    } else {
+    if (state.mode === 'plan') {
       if (k.startsWith('Digit')) {
         const i = parseInt(k.slice(5), 10) - 1;
         if (FEATURE_TYPES[i]) { state.planType = FEATURE_TYPES[i].id; refreshPalette(); }
       }
-      if (k === 'KeyQ') state.planAngle -= 0.18;
-      if (k === 'KeyR') state.planAngle += 0.18;
+      return;
     }
+    if (k === 'Digit1') player.toolIdx = 0;
+    if (k === 'Digit2') player.toolIdx = 1;
+    if (k === 'Digit3') player.toolIdx = 2;
+    if (k === 'Digit4') player.toolIdx = 3;
+    vm && vm.setTool(player.tool.id);
   });
   window.addEventListener('keyup', e => { state.input.keys[e.code] = false; });
   window.addEventListener('blur', () => { state.input.keys = {}; });
@@ -381,18 +366,13 @@ function bindInput() {
     e.preventDefault();
     if (state.mode === 'play') {
       const step = 0.12;
-      if (player.mode === 'pour') player.pourRadius = clamp(player.pourRadius + (e.deltaY > 0 ? -step : step), 0.15, 3.2);
-      else player.brushRadius = clamp(player.brushRadius + (e.deltaY > 0 ? -step : step) * 1.2, 0.22, 2.6);
+      player.setRadius(player.brushRadius + (e.deltaY > 0 ? -step : step) * 1.2);
     } else {
       const f = state.hovered;
-      const target = f || { r: FEATURE_TYPES.find(t => t.id === state.planType).r, h: FEATURE_TYPES.find(t => t.id === state.planType).h };
-      if (e.shiftKey) {
-        const d = (e.deltaY > 0 ? -0.15 : 0.15);
-        target.h = clamp(target.h + d, -4, 4);
-      } else {
-        const d = (e.deltaY > 0 ? -0.2 : 0.2);
-        target.r = clamp(target.r + d, 0.6, 9);
-      }
+      const def = FEATURE_TYPES.find(t => t.id === state.planType);
+      const target = f || { r: def.r, h: def.h };
+      if (e.shiftKey) target.h = clamp(target.h + (e.deltaY > 0 ? -0.15 : 0.15), -4, 4);
+      else target.r = clamp(target.r + (e.deltaY > 0 ? -0.2 : 0.2), 0.6, 9);
       if (f) { f.dome.scale.set(f.r, f.h < 0 ? 0.001 : f.h, f.r); }
       else { state.planBrushR = target.r; }
       plan.update(0, terrain, player.pos, true);
@@ -403,6 +383,40 @@ function bindInput() {
     document.getElementById('hint').classList.toggle('show', !state.locked && state.mode === 'play');
   });
   window.addEventListener('resize', onResize);
+}
+
+// ---------------------------------------------------------------- buttons
+// The whole "menu" is mouse-only: Esc releases the pointer, then click.
+function bindButtons() {
+  const on = (id, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); fn(); });
+  };
+  on('btnPlan', () => togglePlanMode());
+  on('btnPlanDone', () => togglePlanMode());
+  on('btnSheet', () => {
+    const sheet = document.getElementById('planSheet');
+    const show = !sheet.classList.contains('show');
+    UI.showSheet(show);
+    if (show) UI.renderSheet(plan.progress(terrain));
+  });
+  on('btnBarrow', () => { if (state.mode === 'play') player.toggleBarrow(); });
+  on('btnMap', () => {
+    state.showMinimap = !state.showMinimap;
+    document.getElementById('btnMap').classList.toggle('on', state.showMinimap);
+  });
+  on('btnSave', () => save());
+  on('btnLoad', () => load());
+  on('btnHelp', () => UI.showHelp(!document.getElementById('help').classList.contains('show')));
+  on('btnSheetClose', () => UI.showSheet(false));
+  on('btnTurnL', () => { state.planAngle -= 0.18; });
+  on('btnTurnR', () => { state.planAngle += 0.18; });
+  // plan palette is clickable too
+  document.querySelectorAll('#planPalette .pt').forEach(el => {
+    el.addEventListener('click', () => { state.planType = el.dataset.type; refreshPalette(); });
+  });
+  // buttons must be reachable with the pointer free; never lock from them
+  document.getElementById('hudBar').addEventListener('mousedown', e => e.stopPropagation());
 }
 
 function refreshPalette() {
@@ -427,7 +441,7 @@ function togglePlanMode() {
     refreshPalette();
     planCam.position.set(player.pos.x, 62, player.pos.z + 6);
     planCam.lookAt(player.pos.x, terrain.heightAt(player.pos.x, player.pos.z), player.pos.z);
-    UI.toast('PLAN MODE — lay out the whole line before you dig. Press P to go back to work.');
+    UI.toast('PLAN MODE — lay out the whole line first. Click Done (top right) to go back to digging.');
     state.planBrushR = undefined;
   } else {
     state.mode = 'play';
@@ -466,8 +480,8 @@ function updatePlanCursor() {
   const hh = hov ? hov.h : def.h;
   if (state.mode === 'plan') {
     document.getElementById('planInfo').innerHTML =
-      (hov ? `<b>${def.name} #${hov.id}</b> — wheel: radius · Shift+wheel: height · Q/R: rotate · RMB: delete`
-        : `<b>${def.name}</b> — click to place · wheel: radius · Shift+wheel: height · Q/R: rotate`) +
+      (hov ? `<b>${def.name} #${hov.id}</b> — wheel: radius · Shift+wheel: height · ◀ ▶: heading · RMB: delete`
+        : `<b>${def.name}</b> — click to place · wheel: radius · Shift+wheel: height · ◀ ▶: heading`) +
       `<br><span>r ${r.toFixed(1)} m · h ${Math.abs(hh).toFixed(1)} m · heading ${(state.planAngle * 180 / Math.PI).toFixed(0)}°</span>`;
   }
   // brush ring preview in plan mode
@@ -654,8 +668,12 @@ function init() {
 
 // avoid double-binding listeners when starting a fresh world
 let boundOnce = false;
-const _bind = bindInput;
-function bindInputOnce() { if (boundOnce) return; boundOnce = true; _bind(); }
+function bindInputOnce() {
+  if (boundOnce) return;
+  boundOnce = true;
+  bindInput();
+  bindButtons();
+}
 
 window.addEventListener('DOMContentLoaded', init);
 
