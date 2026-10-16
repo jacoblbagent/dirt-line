@@ -164,9 +164,11 @@ export class Terrain {
   // and off steep ground so jump lines stay clear.
   generateTrees(seed, zone) {
     const S = (seed | 0) + 501, out = [];
-    const step = 4.2, N = this.N;
-    for (let z = -this.half + 3; z < this.half - 3; z += step) {
-      for (let x = -this.half + 3; x < this.half - 3; x += step) {
+    // keep every trunk comfortably inside the walkable area (the player is
+    // clamped to ±(HALF-2)), so no tree ever sits in the dead margin
+    const edge = this.half - 5, step = 4.2, N = this.N;
+    for (let z = -edge; z < edge; z += step) {
+      for (let x = -edge; x < edge; x += step) {
         const jx = (rnd((x * 71 + z * 13) | 0, S) - 0.5) * step * 0.9;
         const jz = (rnd((x * 17 - z * 37) | 0, S + 3) - 0.5) * step * 0.9;
         const px = x + jx, pz = z + jz;
@@ -184,12 +186,15 @@ export class Terrain {
         if (!ok) continue;
         const r1 = rnd((px * 3 + pz * 7) | 0, S + 41);
         const r2 = rnd((px * 19 - pz * 5) | 0, S + 53);
+        const r3 = rnd((px * 11 + pz * 29) | 0, S + 59);
         out.push({
           x: px, z: pz,
           scale: 0.72 + r1 * 0.85,
+          hMul: 0.78 + r3 * 0.75,          // height varies a lot tree to tree
+          crownMul: 0.78 + r2 * 0.5,
           rot: r2 * Math.PI * 2,
           lean: (r1 - 0.5) * 0.08,
-          trunkR: 0.16 + r1 * 0.14,
+          trunkR: 0.09 + r1 * 0.10,
           dead: r2 < 0.11,
         });
       }
@@ -273,9 +278,9 @@ export class Terrain {
         const grain = fbm((wx + 700) / 1.35, (wz + 700) / 1.35, S, 2);
         const litter = fbm((wx + 60) / 3.1, (wz + 60) / 3.1, S + 5, 2);
         const clod = fbm((wx + 400) / 0.55, (wz + 400) / 0.55, S + 17, 2);
-        // base soil
-        let R = 104 + grain * 44 + clod * 18, G = 85 + grain * 36 + clod * 15,
-            B = 64 + grain * 30 + clod * 11;
+        // base soil — pale clay under dark topsoil, like a fresh dig
+        let R = 116 + grain * 42 + clod * 18, G = 98 + grain * 34 + clod * 14,
+            B = 74 + grain * 26 + clod * 10;
         // leaf / pine-needle litter mottling
         const lit = clamp((litter - 0.50) * 2.6, 0, 1);
         R += lit * 28; G += lit * 10; B -= lit * 6;
@@ -286,7 +291,7 @@ export class Terrain {
         if (gc > 0.01) {
           const patch = 0.55 + 0.45 * fbm((wx + 3) / 1.1, (wz + 3) / 1.1, S + 13, 2);
           const g1 = gc * patch;
-          const gR = 68 + grain * 44, gG = 102 + grain * 52, gB = 42 + grain * 28;
+          const gR = 60 + grain * 34, gG = 84 + grain * 42, gB = 42 + grain * 22;
           R = R * (1 - g1) + gR * g1;
           G = G * (1 - g1) + gG * g1;
           B = B * (1 - g1) + gB * g1;
@@ -309,10 +314,27 @@ export class Terrain {
       ctx.save();
       ctx.translate(this.px(wx), this.py(wz));
       ctx.rotate(a);
-      ctx.strokeStyle = `rgba(${60 + rnd(i, S + 79) * 40 | 0},${48 + rnd(i, S + 83) * 30 | 0},34,0.55)`;
+      ctx.strokeStyle = rnd(i, S + 79) > 0.45
+        ? `rgba(${92 + rnd(i, S + 83) * 34 | 0},${58 + rnd(i, S + 87) * 22 | 0},34,0.6)`
+        : `rgba(${60 + rnd(i, S + 79) * 40 | 0},${48 + rnd(i, S + 83) * 30 | 0},34,0.5)`;
       ctx.lineWidth = 0.8 + rnd(i * 3, S + 89) * 1.6;
       ctx.beginPath(); ctx.moveTo(-len / 2, 0); ctx.lineTo(len / 2, 0); ctx.stroke();
       ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    // moss patches in the damp, grassy corners of the woods
+    ctx.globalAlpha = 0.30;
+    for (let i = 0; i < Math.round(700 * (CFG.TEX / 1024) ** 2); i++) {
+      const wx = -this.half + rnd(i * 31, S + 131) * this.world;
+      const wz = -this.half + rnd(i * 53, S + 137) * this.world;
+      const gi = this.idx(clamp(Math.round(this.colOf(wx)), 0, this.N - 1),
+                          clamp(Math.round(this.rowOf(wz)), 0, this.N - 1));
+      if (this.g[gi] < 110) continue;
+      const r = 3 + rnd(i * 19, S + 139) * 9;
+      ctx.fillStyle = 'rgba(52,70,36,1)';
+      ctx.beginPath();
+      ctx.ellipse(this.px(wx), this.py(wz), r, r * 0.7, rnd(i * 7, S + 149) * 3, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
     // pebbles / clods so the ground has something to read up close
@@ -716,7 +738,7 @@ export class Terrain {
     for (let i = lo; i <= hi; i++) {
       const p = this.p[i] / 255;
       const sun = this.g[i] / 255;
-      const tone = 0.60 + 0.52 * p;
+      const tone = 0.56 + 0.62 * p;
       let r = tone, g = tone * 0.97, b = tone * 0.92;
       const pit = Math.max(0, this.h0[i] - this.h[i]);
       const dark = clamp(1 - pit * 0.20, 0.42, 1);
@@ -726,7 +748,7 @@ export class Terrain {
       r *= light; g *= light; b *= light;
       r *= 1 - 0.07 * sun; g *= 1 + 0.03 * sun; b *= 1 - 0.11 * sun;
       // very firm faces pick up a faint dry sheen
-      if (p > 0.78) { const k = (p - 0.78) / 0.22 * 0.06; r += k; g += k; b += k; }
+      if (p > 0.78) { const k = (p - 0.78) / 0.22 * 0.10; r += k; g += k; b += k; }
       col[i * 3] = r; col[i * 3 + 1] = g; col[i * 3 + 2] = b;
     }
   }

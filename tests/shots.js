@@ -64,6 +64,8 @@ const BUILD = `() => {
     await page.screenshot({ path: file });
   };
 
+  // spawn view: staging gear at the edge of the dirt zone
+  await look(-4, 20, Math.PI, -0.06, '/tmp/verify/shot-0-spawn.png', 'spade');
   // standing on the line, lip + landing in front
   await look(0, 12, 0, -0.12, '/tmp/verify/shot-1-line.png', 'flathead');
   // the borrow pit and the loose spoil heap it produced

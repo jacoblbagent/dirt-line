@@ -9,7 +9,7 @@ const GRAV = 21.0;
 export class Player {
   constructor(scene, terrain) {
     this.terrain = terrain;
-    this.pos = new THREE.Vector3(0, 0, 26);
+    this.pos = new THREE.Vector3(-4, 0, 20);
     this.vel = new THREE.Vector3();
     this.yaw = Math.PI;      // looking north (-Z)
     this.pitch = -0.12;

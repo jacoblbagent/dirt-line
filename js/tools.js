@@ -32,8 +32,8 @@ export const TOOLS = [
 const wood = () => new THREE.MeshStandardMaterial({ color: 0xb98a52, roughness: 0.85 });
 const orange = () => new THREE.MeshStandardMaterial({ color: 0xd4682c, roughness: 0.7 });
 // metals need an environment to reflect; keep metalness low or they render black
-const steel = () => new THREE.MeshStandardMaterial({ color: 0xaab0b6, roughness: 0.40, metalness: 0.25 });
-const dark = () => new THREE.MeshStandardMaterial({ color: 0x60646a, roughness: 0.55, metalness: 0.20 });
+const steel = () => new THREE.MeshStandardMaterial({ color: 0xc3c8cd, roughness: 0.42, metalness: 0.15 });
+const dark = () => new THREE.MeshStandardMaterial({ color: 0x6d7176, roughness: 0.55, metalness: 0.15 });
 
 function handle(len, r, mat) {
   const g = new THREE.Group();
@@ -49,37 +49,46 @@ function handle(len, r, mat) {
 
 export function buildToolModels() {
   const out = {};
-  // --- spade: long handle + scooped blade ---
+  // --- spade: long handle + flat scoop blade ---
   {
     const g = new THREE.Group();
     g.add(handle(0.98, 0.022, wood()));
-    const blade = new THREE.Group();
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.30, 0.02), steel());
+    const bladeGrp = new THREE.Group();
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.30, 0.018), steel());
     b.position.set(0, 0.13, 0);
-    blade.add(b);
-    const scoop = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.23, 12, 1, true, 0, Math.PI), steel());
-    scoop.rotation.z = Math.PI / 2; scoop.rotation.y = Math.PI / 2;
-    scoop.position.set(0, 0.13, 0.02);
-    scoop.material.side = THREE.DoubleSide;
-    blade.add(scoop);
-    const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.12, 8), dark());
-    sock.position.y = 0.31; blade.add(sock);
-    blade.position.y = -0.02;
-    g.add(blade);
+    bladeGrp.add(b);
+    // shallow side walls hint at the scoop without a stray shell
+    for (const s of [-1, 1]) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.28, 0.055), steel());
+      w.position.set(s * 0.10, 0.13, 0.028);
+      w.rotation.x = -0.12;
+      bladeGrp.add(w);
+    }
+    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.045, 0.02), dark());
+    tip.position.set(0, -0.015, 0.004);
+    bladeGrp.add(tip);
+    const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.032, 0.13, 8), dark());
+    sock.position.y = 0.31;
+    bladeGrp.add(sock);
+    bladeGrp.rotation.x = 0.10;
+    g.add(bladeGrp);
     out.spade = g;
   }
   // --- flat head: wide flat rectangular blade (orange socket) ---
   {
     const g = new THREE.Group();
-    g.add(handle(0.92, 0.023, wood()));
+    const inner = new THREE.Group();
+    inner.position.y = 0.40;      // blade hangs below the grip on a real one
+    inner.add(handle(0.92, 0.023, wood()));
     const socket = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.20, 0.045), orange());
-    socket.position.y = -0.10; g.add(socket);
+    socket.position.y = -0.10; inner.add(socket);
     const blade = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.28, 0.016), steel());
-    blade.position.y = -0.33; g.add(blade);
+    blade.position.y = -0.33; inner.add(blade);
     const lip = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 0.03), dark());
-    lip.position.y = -0.46; g.add(lip);
+    lip.position.y = -0.46; inner.add(lip);
     const step = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.02, 0.05), dark());
-    step.position.set(0, -0.19, 0.02); g.add(step);
+    step.position.set(0, -0.19, 0.02); inner.add(step);
+    g.add(inner);
     out.flathead = g;
   }
   // --- pick axe ---
@@ -128,26 +137,30 @@ export class ViewModel {
     this.pivot = new THREE.Group();          // rotates for the swing
     this.root.add(this.pivot);
 
-    // gloved forearm + hand
+    // gloved arm reaching in from off-screen to the grip. Kept in the root (not
+    // the pivot) so it does not swing with the tool.
     const skin = new THREE.MeshStandardMaterial({ color: 0xc98f63, roughness: 0.8 });
-    const sleeve = new THREE.MeshStandardMaterial({ color: 0x3a4a63, roughness: 0.9 });
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.055, 0.34, 8), sleeve);
-    arm.position.set(0.02, -0.20, 0.10); arm.rotation.set(0.55, 0, 0.12);
-    this.pivot.add(arm);
+    const sleeve = new THREE.MeshStandardMaterial({ color: 0x5c6b52, roughness: 0.92 });
+    const elbow = new THREE.Vector3(0.60, -0.78, 0.46);
+    const dir = elbow.clone().negate().normalize();
+    const len = elbow.length();
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.062, len, 8), sleeve);
+    arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    arm.position.copy(elbow).addScaledVector(dir, len / 2);
+    this.root.add(arm);
+
     const hand = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), skin);
     hand.position.set(0.0, -0.035, 0.0);
+    hand.scale.set(1, 1.15, 0.9);
     this.pivot.add(hand);
-    const arm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.30, 8), sleeve);
-    arm2.position.set(-0.02, -0.22, 0.16); arm2.rotation.set(0.75, 0, -0.25);
-    this.pivot.add(arm2);
 
     for (const [id, m] of Object.entries(this.models)) {
       m.visible = false;
       this.groups[id] = m;
       this.pivot.add(m);
     }
-    this.root.position.set(0.33, -0.38, -0.80);
-    this.root.rotation.set(0.20, -0.34, 0.16);
+    this.root.position.set(0.36, -0.36, -0.82);
+    this.root.rotation.set(0.04, -0.44, 0.14);
     this.root.scale.setScalar(0.66);
     // parented to the camera so the tool rides in view like real hands
     camera.add(this.root);
@@ -183,33 +196,37 @@ export class ViewModel {
       if (this.swing < 0.05) this.swing = 0;
     }
     const s = this.swing;
-    let rx = 0, rz = 0, ty = 0, tz = 0;
+    // rest pose ~0.10 (tool carried upright); the swing drives it down and
+    // forward into the ground, then it recovers to rest.
+    const a = Math.sin(s * Math.PI);
+    let rx = 0.10, rz = 0, ty = 0, tz = 0;
     if (this.toolId === 'rake') {
       const sw = Math.sin(s * Math.PI * 2);
-      rz = sw * 0.55;
-      tz = -Math.abs(sw) * 0.10;
-      rx = 0.15 + Math.abs(sw) * 0.1;
+      rz = sw * 0.5;
+      tz = -Math.abs(sw) * 0.08;
+      rx = 0.16 - Math.abs(sw) * 0.10;
     } else if (this.toolId === 'flathead') {
-      // quick tamp straight down
-      const a = Math.sin(s * Math.PI);
-      rx = 0.9 - a * 1.0;
-      rx = Math.max(0.05, rx);
-      ty = -a * 0.16;
-      tz = -a * 0.10;
-    } else {
-      // overhead jab (spade / pick axe)
-      const a = Math.sin(s * Math.PI);
-      rx = 0.55 - a * 1.25;
-      rx = Math.max(-0.75, rx);
-      tz = -a * 0.16;
+      // short hard tamp
+      rx = 0.10 - a * 0.72;
+      ty = -a * 0.13;
+      tz = -a * 0.06;
+    } else if (this.toolId === 'pickaxe') {
+      // longer, heavier drive
+      rx = 0.12 - a * 1.05;
+      tz = -a * 0.12;
       ty = -a * 0.05;
+    } else {
+      // spade scoop
+      rx = 0.10 - a * 0.95;
+      tz = -a * 0.14;
+      ty = -a * 0.04;
     }
     this.pivot.rotation.x = rx;
     this.pivot.rotation.z = rz;
     this.pivot.position.set(swayX, ty, tz);
 
     // subtle vertical float, calmed
-    this.root.position.x = 0.33 + swayX * 0.4;
-    this.root.position.y = -0.38 + swayY;
+    this.root.position.x = 0.36 + swayX * 0.4;
+    this.root.position.y = -0.36 + swayY;
   }
 }

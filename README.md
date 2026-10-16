@@ -10,6 +10,20 @@ dirt that only stays where you pack it.
 
 ![Jump line under construction](docs/screenshot-line.png)
 
+Modelled on real build photos: tall bare-trunked woodland with the canopy high
+overhead, pine-needle and leaf litter underfoot, moss and fallen logs — and the
+gear that piles up at the edge of a dig (buckets, cooler, jug, bag, boards, a
+spade left standing in the dirt).
+
+![Staging area at the edge of the dirt zone](docs/screenshot-staging.png)
+
+The riding surface is packed clay and reads noticeably lighter and smoother than
+the dark loose spoil around it, because that's exactly what the soil model is
+doing — packed cells are pale and firm, freshly dug or poured cells are dark and
+about to slump.
+
+![Packed lip face under the flat head](docs/screenshot-flathead.png)
+
 ## What you do
 
 1. **Plan the line first** — `P` opens an overhead plan view. Click the ground to
@@ -87,6 +101,7 @@ js/terrain.js       heightfield, soil state, brushes, slumping, surface texture
 js/tools.js         tool definitions + first-person tool models and swing
 js/player.js        first-person controller, aim ray-march, work loop, barrow
 js/plan.js          plan features, ghost guides, progress, minimap
+js/props.js         staging gear + fallen logs (scene dressing)
 js/ui.js            HUD, plan sheet, plan-mode chrome
 js/sfx.js           WebAudio foley (scrapes, tamps, pours, wind bed)
 js/main.js          bootstrap, world build, input, main loop

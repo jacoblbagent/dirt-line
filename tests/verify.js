@@ -293,20 +293,34 @@ const MEASURE = `(t, x, z, litres) => {
   check('eye height is a 6 ft human', Math.abs(walk.eye - 1.83) < 0.12, walk.eye.toFixed(2) + ' m');
   check('jumping leaves the ground', walk.vy > 3, 'vy ' + walk.vy.toFixed(2));
 
-  // trees must block the player
+  // trees must block the player — pick one well inside the walkable woods
   const collide = await page.evaluate(() => {
-    const A = window.__app, p = A.player, tr = A.treeData[0];
-    p.pos.set(tr.x + 2.4, A.terrain.heightAt(tr.x + 2.4, tr.z), tr.z);
+    const A = window.__app, p = A.player;
+    let tr = null, bd = 1e9;
+    for (const t of A.treeData) {
+      if (Math.abs(t.x) > 45 || Math.abs(t.z) > 45) continue;   // stay off the map edge
+      const d = Math.hypot(t.x - 18, t.z + 14);
+      if (d < bd) { bd = d; tr = t; }
+    }
+    const start = { x: tr.x + 3.0, z: tr.z };
+    p.pos.set(start.x, A.terrain.heightAt(start.x, start.z) + 0.05, start.z);
     p.vel.set(0, 0, 0);
-    p.yaw = Math.atan2(-(tr.x - p.pos.x), -(tr.z - p.pos.z));
+    p.yaw = Math.PI / 2;                 // forward = (-1,0,0): straight at the trunk
     A.state.input.keys = { KeyW: true };
-    for (let i = 0; i < 180; i++) p.update(1 / 60, A.state.input, A.treeData);
+    let minD = 1e9, crossed = false;
+    for (let i = 0; i < 300; i++) {
+      p.update(1 / 60, A.state.input, A.treeData);
+      const d = Math.hypot(p.pos.x - tr.x, p.pos.z - tr.z);
+      minD = Math.min(minD, d);
+      if (p.pos.x < tr.x) crossed = true;
+    }
     A.state.input.keys = {};
-    const d = Math.hypot(p.pos.x - tr.x, p.pos.z - tr.z);
-    return { d, trunk: tr.trunkR };
+    return { trunkR: tr.trunkR, minD, crossed, endX: p.pos.x, treeX: tr.x,
+      travelled: Math.abs(p.pos.x - start.x) };
   });
   check('trees are solid — you cannot walk through a trunk',
-    collide.d > collide.trunk + 0.2, `stopped ${collide.d.toFixed(2)} m from the trunk`);
+    collide.minD > collide.trunkR + 0.15 && !collide.crossed && collide.travelled < 2.6,
+    `stopped ${collide.minD.toFixed(2)} m from the trunk after ${collide.travelled.toFixed(2)} m of pushing`);
 
   // ---------- carrying dirt the whole way ----------
   const loop = await page.evaluate(() => {
