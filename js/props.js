@@ -1,184 +1,122 @@
-// Scene dressing: the gear that piles up around a dig (bucket, cooler, jug,
-// trash bag, boards, a shovel left stuck in the dirt) and fallen logs.
-import { CFG } from './config.js';
-import { rnd } from './noise.js';
+// Scene dressing built from the detailed prop models: staging gear at the edge
+// of the dirt zone, tools left standing in the dirt, fallen logs, stumps.
+import { mergeGeos, xform, colorize, facet } from './geo.js';
+import { groupFromParts } from './materials.js';
+import {
+  buildBucket, buildCooler, buildJug, buildTrashBag, buildPlank, buildDirtHeap,
+} from './models-props.js';
+import { TOOL_MODELS, TOOL_TIP_Y } from './models-tools.js';
+import { buildLog, buildStump, buildRock } from './models-plants.js';
+import { hash } from './geo.js';
+
 const THREE = window.THREE;
 
-function mat(color, rough = 0.85, metal = 0.05, flat = false) {
-  const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
-  if (flat) m.flatShading = true;
-  return m;
-}
-
-// A spade left standing in the dirt — the signature shot of every build photo.
-export function stuckShovel(x, z, y, yaw) {
-  const g = new THREE.Group();
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 1.15, 8), mat(0xb98a52));
-  shaft.position.y = 0.52;
-  g.add(shaft);
-  const sock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.17, 0.04), mat(0xd4682c, 0.7));
-  sock.position.y = -0.06;
-  g.add(sock);
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.28, 0.016), mat(0x9ea4aa, 0.45, 0.2));
-  blade.position.y = -0.28;
-  g.add(blade);
-  g.position.set(x, y, z);
-  g.rotation.set(0.30, yaw, -0.22);
-  return g;
-}
-
-export function bucket(x, z, y, yaw) {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.165, 0.125, 0.30, 14, 1, true), mat(0xd0521c, 0.65));
-  body.material.side = THREE.DoubleSide;
-  body.position.y = 0.15;
-  g.add(body);
-  const bottom = new THREE.Mesh(new THREE.CircleGeometry(0.125, 14), mat(0xa83f14, 0.7));
-  bottom.rotation.x = -Math.PI / 2;
-  bottom.position.y = 0.005;
-  g.add(bottom);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.165, 0.012, 6, 16), mat(0xe06228, 0.6));
-  rim.rotation.x = Math.PI / 2;
-  rim.position.y = 0.30;
-  g.add(rim);
-  const handle = new THREE.Mesh(
-    new THREE.TorusGeometry(0.16, 0.01, 5, 14, Math.PI * 1.05), mat(0x9aa0a6, 0.5, 0.2));
-  handle.rotation.set(Math.PI / 2, 0, 0);
-  handle.position.y = 0.30;
-  g.add(handle);
-  // a bit of spoil in the bottom
-  const dirt = new THREE.Mesh(new THREE.CircleGeometry(0.135, 14), mat(0x6b5946, 0.95));
-  dirt.rotation.x = -Math.PI / 2;
-  dirt.position.y = 0.07;
-  g.add(dirt);
-  g.position.set(x, y, z);
-  g.rotation.y = yaw;
-  return g;
-}
-
-export function cooler(x, z, y, yaw) {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.26, 0.32), mat(0xe6e7e2, 0.7));
-  body.position.y = 0.15;
-  g.add(body);
-  const lid = new THREE.Mesh(new THREE.BoxGeometry(0.53, 0.05, 0.35), mat(0xdfe0da, 0.65));
-  lid.position.y = 0.305;
-  g.add(lid);
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.03, 0.03), mat(0xb9bdb8, 0.6));
-  handle.position.set(0, 0.33, 0.18);
-  g.add(handle);
-  g.position.set(x, y, z);
-  g.rotation.y = yaw;
-  return g;
-}
-
-export function jug(x, z, y, yaw) {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.10, 0.28, 12), mat(0xd7dbdd, 0.5));
-  body.position.y = 0.14;
-  g.add(body);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.06, 0.07, 10), mat(0xc9cdd0, 0.5));
-  neck.position.y = 0.31;
-  g.add(neck);
-  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.04, 10), mat(0x3f6bb5, 0.6));
-  cap.position.y = 0.355;
-  g.add(cap);
-  g.position.set(x, y, z);
-  g.rotation.y = yaw;
-  return g;
-}
-
-export function trashBag(x, z, y, yaw) {
-  const geo = new THREE.IcosahedronGeometry(1, 1);
-  const g = new THREE.Group();
-  const bag = new THREE.Mesh(geo, mat(0x181a1f, 0.55, 0.0, true));
-  bag.scale.set(0.26, 0.20, 0.24);
-  bag.position.y = 0.19;
-  g.add(bag);
-  const tie = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.10, 7), mat(0x101216, 0.6, 0, true));
-  tie.position.y = 0.42;
-  g.add(tie);
-  g.position.set(x, y, z);
-  g.rotation.set(0, yaw, 0.06);
-  return g;
-}
-
-// Planks / boards stacked or laid on the ground (every build has some).
-export function boards(x, z, y, yaw, n = 3) {
-  const g = new THREE.Group();
-  for (let i = 0; i < n; i++) {
-    const len = 1.5 + rnd(i * 7, 33) * 1.1;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(len, 0.035, 0.24), mat(0x9d7a52, 0.92));
-    b.position.set(rnd(i * 11, 51) * 0.18 - 0.09, 0.02 + i * 0.045,
-      rnd(i * 5, 71) * 0.22 - 0.11);
-    b.rotation.y = (rnd(i * 3, 91) - 0.5) * 0.4;
-    b.rotation.z = (rnd(i * 13, 17) - 0.5) * 0.03;
-    g.add(b);
+// Bake a list of { parts, transform } into one merged geometry per material.
+function bakeAll(items) {
+  const byMat = new Map();
+  for (const it of items) {
+    let parts = it.parts;
+    if (it.transform) {
+      const baked = new Map();
+      for (const [k, geo] of parts) baked.set(k, xform(geo, it.transform));
+      parts = baked;
+    }
+    for (const [k, geo] of parts) {
+      if (!geo) continue;
+      if (!byMat.has(k)) byMat.set(k, []);
+      byMat.get(k).push(geo);
+    }
   }
-  g.position.set(x, y, z);
-  g.rotation.y = yaw;
-  return g;
+  const out = new Map();
+  for (const [k, list] of byMat) out.set(k, mergeGeos(list));
+  return out;
 }
 
-// Fallen logs + stumps scattered through the woods.
-export function buildLogs(terrain, list) {
-  const geo = new THREE.CylinderGeometry(1, 1, 1, 7);
-  const geoStump = new THREE.CylinderGeometry(0.9, 1.1, 1, 8);
-  const logs = new THREE.InstancedMesh(geo, mat(0x8b7355, 0.95, 0, true), list.length);
-  const stumps = new THREE.InstancedMesh(geoStump, mat(0x7d6a50, 0.95, 0, true), list.length);
-  logs.castShadow = true; logs.receiveShadow = true;
-  stumps.castShadow = true; stumps.receiveShadow = true;
-  const o = new THREE.Object3D();
-  const up = new THREE.Vector3(0, 1, 0);
-  let li = 0, si = 0;
+// A tool standing in the dirt, blade buried. Returns baked parts (already in
+// world space).
+export function stuckTool(id, x, z, groundY, yaw, tilt = 0.30) {
+  const parts = TOOL_MODELS[id]();
+  const depth = 0.16;
+  const m = {
+    pos: [x, groundY - TOOL_TIP_Y[id] - depth - 0.0, z],
+    rot: [tilt, yaw, -0.20],
+  };
+  const out = new Map();
+  for (const [k, geo] of parts) out.set(k, xform(geo, m));
+  return out;
+}
+
+export function buildStaging(terrain, materials) {
+  const items = [];
+  const put = (parts, x, z, yaw, extraY = 0) => {
+    items.push({
+      parts,
+      transform: { pos: [x, terrain.heightAt(x, z) + extraY, z], rot: [0, yaw, 0], scale: [1, 1, 1] },
+    });
+  };
+
+  // staged where the digger spawns, so the gear is the first thing you see
+  put(buildBucket(), -7.4, 16.6, 0.4);
+  put(buildCooler(), -6.1, 17.7, -0.7);
+  put(buildJug(), -8.4, 17.8, 1.2);
+  put(buildTrashBag(), -5.6, 15.6, 2.4);
+  put(buildBucket(), 2.9, 17.0, -1.1);
+  put(buildCooler(), 4.2, 18.0, 0.2);
+  for (let i = 0; i < 4; i++) {
+    const p = buildPlank(1.7 + hash(i, 3, 1) * 0.6, 0.24, 0.032, 10 + i, { broken: i === 3 });
+    put(p, -3.6 + hash(i, 7, 2) * 0.22, 18.2 + hash(i, 11, 3) * 0.22, 0.9 + (hash(i, 13, 4) - 0.5) * 0.5, 0.02 + i * 0.036);
+  }
+  for (let i = 0; i < 3; i++) {
+    const p = buildPlank(1.5 + hash(i, 5, 9) * 0.5, 0.22, 0.03, 20 + i, { broken: i === 2 });
+    put(p, 6.6 + hash(i, 17, 5) * 0.2, 16.4 + hash(i, 19, 6) * 0.2, -0.35 + (hash(i, 23, 7) - 0.5) * 0.6, 0.02 + i * 0.034);
+  }
+  // tools left where work stopped
+  items.push({ parts: stuckTool('spade', -3.2, 12.4, terrain.heightAt(-3.2, 12.4), 0.6) });
+  items.push({ parts: stuckTool('flathead', 12.4, 3.6, terrain.heightAt(12.4, 3.6), -1.4) });
+  items.push({ parts: stuckTool('pickaxe', -11.5, 8.2, terrain.heightAt(-11.5, 8.2), 2.2, 0.42) });
+  // a rake laid flat on the ground
+  items.push({
+    parts: TOOL_MODELS.rake(),
+    transform: { pos: [3.1, terrain.heightAt(3.1, 9.4) + 0.05, 9.4], rot: [Math.PI / 2 - 0.08, 1.1, 0], scale: [1, 1, 1] },
+  });
+  // a heap of spoil next to the pit
+  const heap = buildDirtHeap(0.62, 41);
+  items.push({ parts: new Map([['bark', heap]]), transform: { pos: [-6.6, terrain.heightAt(-6.6, 13.2) - 0.05, 13.2] } });
+  return groupFromParts(bakeAll(items), materials);
+}
+
+// Fallen logs and stumps, merged into single draw calls.
+export function buildLogs(terrain, list, materials) {
+  const items = [];
   list.forEach((d, i) => {
     const y = terrain.heightAt(d.x, d.z);
     if (d.stump) {
-      o.position.set(d.x, y + d.r * 0.55, d.z);
-      o.quaternion.identity();
-      o.scale.set(d.r, d.r * 1.1, d.r);
-      o.updateMatrix();
-      stumps.setMatrixAt(si++, o.matrix);
+      const parts = buildStump(i * 7 + 3, d.r * 2.2, 0.30 + d.r * 1.4);
+      items.push({ parts, transform: { pos: [d.x, y - 0.04, d.z], rot: [0, d.ang || 0, 0] } });
     } else {
-      const dir = new THREE.Vector3(Math.cos(d.ang), 0.06, Math.sin(d.ang)).normalize();
-      o.quaternion.setFromUnitVectors(up, dir);
-      o.scale.set(d.r, d.len, d.r);
-      o.position.set(d.x + dir.x * d.len * 0.5, y + d.r * 0.85, d.z + dir.z * d.len * 0.5);
-      o.updateMatrix();
-      logs.setMatrixAt(li++, o.matrix);
+      const parts = buildLog(i * 13 + 5, d.len * 1.5, d.r * 1.5, { torn: i % 3 === 0 });
+      items.push({
+        parts,
+        transform: {
+          pos: [d.x, y + d.r * 0.55, d.z],
+          rot: [0, d.ang || 0, 0],
+        },
+      });
     }
   });
-  logs.count = li; stumps.count = si;
-  logs.instanceMatrix.needsUpdate = true;
-  stumps.instanceMatrix.needsUpdate = true;
-  const g = new THREE.Group();
-  g.add(logs); g.add(stumps);
-  return g;
+  return groupFromParts(bakeAll(items), materials);
 }
 
-// Everything a digger drags out to the woods, staged at the edge of the dirt zone.
-export function buildStaging(terrain, rngSeed = 7) {
-  const g = new THREE.Group();
-  const spots = [
-    { f: bucket, x: -17.5, z: 16.5, yaw: 0.4 },
-    { f: cooler, x: -16.2, z: 17.4, yaw: -0.7 },
-    { f: jug, x: -18.6, z: 17.6, yaw: 1.2 },
-    { f: trashBag, x: -15.1, z: 15.6, yaw: 2.4 },
-    { f: bucket, x: 6.4, z: 17.2, yaw: -1.1 },
-    { f: cooler, x: 7.6, z: 18.1, yaw: 0.2 },
-    { f: boards, x: -13.4, z: 18.6, yaw: 0.9, n: 4 },
-    { f: boards, x: 9.8, z: 16.2, yaw: -0.35, n: 3 },
-  ];
-  for (const s of spots) {
-    const y = terrain.heightAt(s.x, s.z);
-    g.add(s.f(s.x, s.z, y, s.yaw, s.n));
-  }
-  // two shovels left standing in the dirt where work stopped
-  g.add(stuckShovel(-3.2, 12.4, terrain.heightAt(-3.2, 12.4), 0.6));
-  g.add(stuckShovel(12.4, 3.6, terrain.heightAt(12.4, 3.6), -1.4));
-  g.traverse(o => {
-    if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
-  });
-  return g;
+// Rocks, each generated with its own fracture pattern.
+export function buildRocks(terrain, list, materials) {
+  const kinds = ['boulder', 'flat', 'shard'];
+  const items = list.map((d, i) => ({
+    parts: buildRock(i * 17 + 11, kinds[i % kinds.length]),
+    transform: {
+      pos: [d.x, terrain.heightAt(d.x, d.z) + d.s * 0.18, d.z],
+      rot: [(hash(i, 3, 1) - 0.5) * 0.6, hash(i, 5, 2) * Math.PI * 2, (hash(i, 7, 3) - 0.5) * 0.6],
+      scale: [d.s, d.s * (0.7 + hash(i, 11, 4) * 0.5), d.s * (0.85 + hash(i, 13, 5) * 0.3)],
+    },
+  }));
+  return groupFromParts(bakeAll(items), materials);
 }

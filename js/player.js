@@ -2,16 +2,20 @@
 // tool use, dirt carrying, wheelbarrow logistics and soil physics coupling.
 import { CFG, MK, clamp, lerp } from './config.js';
 import { TOOLS } from './tools.js';
+import { groupFromParts } from './materials.js';
+import { buildWheelbarrow, buildDirtHeap } from './models-props.js';
+import { xform } from './geo.js';
 
 const THREE = window.THREE;
 const GRAV = 21.0;
 
 export class Player {
-  constructor(scene, terrain) {
+  constructor(scene, terrain, materials) {
     this.terrain = terrain;
+    this.materials = materials;
     this.pos = new THREE.Vector3(-4, 0, 20);
     this.vel = new THREE.Vector3();
-    this.yaw = Math.PI;      // looking north (-Z)
+    this.yaw = 0;            // looking north (-Z), into the dirt zone
     this.pitch = -0.12;
     this.radius = 0.34;
     this.onGround = true;
@@ -38,35 +42,15 @@ export class Player {
     this.buildBarrow(scene);
   }
 
-  buildBarrow(scene) {
-    const g = new THREE.Group();
-    const tray = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.30, 1.05),
-      new THREE.MeshStandardMaterial({ color: 0xc4552c, roughness: 0.62, metalness: 0.25 }));
-    tray.position.y = 0.52;
-    g.add(tray);
-    const inner = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.22, 0.92),
-      new THREE.MeshStandardMaterial({ color: 0x6b3a22, roughness: 0.95 }));
-    inner.position.set(0, 0.60, 0);
-    g.add(inner);
-    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.09, 14),
-      new THREE.MeshStandardMaterial({ color: 0x1d1d20, roughness: 0.9 }));
-    wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(0, 0.24, 0.34);
-    g.add(wheel);
-    const legMat = new THREE.MeshStandardMaterial({ color: 0x8a8f96, roughness: 0.6, metalness: 0.18 });
-    for (const s of [-1, 1]) {
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.52, 8), legMat);
-      leg.position.set(s * 0.26, 0.26, -0.42);
-      leg.rotation.x = -0.28;
-      g.add(leg);
-      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 1.5, 8), legMat);
-      bar.position.set(s * 0.36, 0.62, -0.32);
-      bar.rotation.x = Math.PI / 2 + 0.22;
-      g.add(bar);
-    }
-    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  buildBarrow(parent) {
+    const g = groupFromParts(buildWheelbarrow(), this.materials);
     this.barrowMesh = g;
-    scene.add(g);
+    parent.add(g);
+    // a loose load of spoil in the tray, scaled to how full the barrow is
+    const heap = xform(buildDirtHeap(0.22, 7), { pos: [0, 0.03, -0.02] });
+    this.barrowLoad = new THREE.Mesh(heap, this.materials.bark);
+    this.barrowLoad.castShadow = true;
+    g.add(this.barrowLoad);
     this.updateBarrowMesh();
   }
 
@@ -77,11 +61,9 @@ export class Player {
     const y = this.terrain.heightAt(b.x, b.z);
     this.barrowMesh.position.set(b.x, y, b.z);
     this.barrowMesh.rotation.y = b.yaw || 0;
-    // visible dirt load in the tray
-    const inner = this.barrowMesh.children[1];
     const f = clamp(b.fill / CFG.BARROW_MAX, 0, 1);
-    inner.scale.set(1, Math.max(0.02, f), 1);
-    inner.position.y = 0.60 - (0.22 * (1 - f)) / 2;
+    this.barrowLoad.visible = f > 0.02;
+    this.barrowLoad.scale.set(1.25, Math.max(0.05, f * 0.9), 1.75);
   }
 
   get tool() { return TOOLS[this.toolIdx]; }

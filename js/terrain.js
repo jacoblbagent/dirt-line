@@ -166,7 +166,7 @@ export class Terrain {
     const S = (seed | 0) + 501, out = [];
     // keep every trunk comfortably inside the walkable area (the player is
     // clamped to ±(HALF-2)), so no tree ever sits in the dead margin
-    const edge = this.half - 5, step = 4.2, N = this.N;
+    const edge = this.half - 5, step = 4.8, N = this.N;
     for (let z = -edge; z < edge; z += step) {
       for (let x = -edge; x < edge; x += step) {
         const jx = (rnd((x * 71 + z * 13) | 0, S) - 0.5) * step * 0.9;

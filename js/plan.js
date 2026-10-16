@@ -1,6 +1,7 @@
 // Pre-build planning: lay out the jump line, keep it as a visible reference
 // (ghost footprints on the ground, a plan sheet, and a minimap) while digging.
 import { CFG, clamp } from './config.js';
+import { buildJumpProfile } from './models-props.js';
 const THREE = window.THREE;
 
 export const FEATURE_TYPES = [
@@ -112,18 +113,20 @@ export class Plan {
     inner.renderOrder = 60; inner.frustumCulled = false;
     g.add(inner);
 
-    // translucent target volume
-    const isPit = f.h < 0;
-    const dome = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2),
-      new THREE.MeshBasicMaterial({
-        color: def.color, transparent: true, opacity: 0.13,
-        side: THREE.DoubleSide, depthWrite: false, wireframe: true,
-      })
-    );
-    dome.scale.set(f.r, Math.abs(f.h), f.r);
-    dome.position.y = isPit ? 0 : 0;
-    dome.renderOrder = 55;
+    // the intended shape of the feature, lofted from its real profile
+    const shape = buildJumpProfile(f.type);
+    const solid = new THREE.Mesh(shape, new THREE.MeshBasicMaterial({
+      color: def.color, transparent: true, opacity: 0.11,
+      side: THREE.DoubleSide, depthWrite: false,
+    }));
+    solid.renderOrder = 54;
+    const wire = new THREE.Mesh(shape, new THREE.MeshBasicMaterial({
+      color: def.color, wireframe: true, transparent: true, opacity: 0.26, depthWrite: false,
+    }));
+    wire.renderOrder = 55;
+    const dome = new THREE.Group();
+    dome.add(solid);
+    dome.add(wire);
     g.add(dome);
 
     const label = this.labelSprite(`${def.name}  r${f.r.toFixed(1)}m  h${Math.abs(f.h).toFixed(1)}m`,
@@ -158,7 +161,8 @@ export class Plan {
     const cy = terrain ? terrain.heightAt(f.x, f.z) : 0;
     f.ghost.position.set(0, 0, 0);
     f.dome.position.set(f.x, cy, f.z);
-    f.dome.scale.set(f.r, f.h < 0 ? 0.001 : f.h, f.r);
+    f.dome.rotation.y = f.angle - Math.PI / 2;      // take-off heading
+    f.dome.scale.set(f.r, Math.abs(f.h), f.r);
     f.ghost.children[f.ghost.children.length - 1].position.set(f.x, cy + Math.max(1.7, Math.abs(f.h) + 1.1), f.z);
     f.ghost.children[f.ghost.children.length - 1].visible = this.visible;
     f.ring.visible = this.visible;
@@ -221,7 +225,7 @@ export class Plan {
     for (const s of arr || []) {
       const f = this.add(s.t, s.x, s.z, s.a || 0);
       f.r = s.r; f.h = s.h; f.len = s.l;
-      f.dome.scale.set(f.r, f.h < 0 ? 0.001 : f.h, f.r);
+      f.dome.scale.set(f.r, Math.abs(f.h), f.r);
     }
   }
 }

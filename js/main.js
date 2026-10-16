@@ -5,7 +5,10 @@ import { Terrain } from './terrain.js';
 import { TOOLS, ViewModel } from './tools.js';
 import { Player } from './player.js';
 import { Plan, BuildZone, drawMinimap, FEATURE_TYPES, setShowVolume } from './plan.js';
-import { buildLogs, buildStaging } from './props.js';
+import { buildLogs, buildStaging, buildRocks } from './props.js';
+import { makeMaterials, groupFromParts } from './materials.js';
+import { buildPine, buildBroadleaf, buildSnag } from './models-plants.js';
+import { xform, mergeGeos } from './geo.js';
 import { SFX } from './sfx.js';
 import { UI } from './ui.js';
 
@@ -114,6 +117,7 @@ const state = {
 };
 
 let renderer, scene, world, camera, planCam, terrain, plan, player, vm, sfx, ringMesh, sun;
+let materials = null, treeVariants = null;
 let trees = [], treeData = [];
 let uiTimer = 0, mapTimer = 0, saveTimer = 0, fpsFrames = 0, fpsLast = performance.now();
 let fpsEl;
@@ -132,13 +136,13 @@ function buildWorld(seed, opts = {}) {
 
   const zone = new BuildZone(-6, -10, 64, 46);
   treeData = terrain.generateTrees(seed, zone);
-  buildScenery(treeData);
+  buildScenery(treeData, seed);
 
   plan = new Plan(zone);
   world.add(plan.group);
 
-  player = new Player(world, terrain);
-  vm = new ViewModel(camera);
+  player = new Player(world, terrain, materials);
+  vm = new ViewModel(camera, materials);
   ringMesh = makeRing();
   world.add(ringMesh);
 
@@ -146,92 +150,71 @@ function buildWorld(seed, opts = {}) {
   state.ready = true;
 }
 
-function buildScenery(list) {
-  const trunkGeo = new THREE.CylinderGeometry(0.72, 1.0, 1, 7);
-  const crownGeo = facet(new THREE.IcosahedronGeometry(1, 1));
-  const branchGeo = new THREE.CylinderGeometry(0.45, 0.75, 1, 5);
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x9a8264, roughness: 0.92, flatShading: true });
-  const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true, vertexColors: false });
-  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, list.length);
-  const crowns = new THREE.InstancedMesh(crownGeo, crownMat, list.length);
-  const branches = new THREE.InstancedMesh(branchGeo, trunkMat, list.length * 3);
-  trunks.castShadow = true; trunks.receiveShadow = true;
-  crowns.castShadow = true; crowns.receiveShadow = true;
-  branches.castShadow = true; branches.receiveShadow = true;
-  trunks.frustumCulled = false; crowns.frustumCulled = false; branches.frustumCulled = false;
+// Detailed procedural trees: a set of unique variants generated once, then every
+// placement is baked into one merged mesh per material — all 180-odd trees in
+// the world cost two draw calls.
+function buildTreeVariants(seed) {
+  const out = [];
+  for (let i = 0; i < 6; i++) out.push({ kind: 'pine', parts: buildPine(seed + i * 31) });
+  for (let i = 0; i < 5; i++) out.push({ kind: 'broad', parts: buildBroadleaf(seed + 100 + i * 37) });
+  out.push({ kind: 'broad', parts: buildBroadleaf(seed + 200, { pale: true }) });
+  for (let i = 0; i < 2; i++) out.push({ kind: 'snag', parts: buildSnag(seed + 300 + i * 41) });
+  return out;
+}
 
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
-  const col = new THREE.Color();
-  const help = new THREE.Object3D();
-  const up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
-  // tall, bare, high-crowned woodland trees — the canopy sits well above head height
-  const greens = [0x6f9c56, 0x5f8a4b, 0x82b166, 0x577f46, 0x8fbc72];
+function buildScenery(list, seed) {
+  // ---------- trees: instanced per variant (14 unique trees, ~180 placements)
+  const variants = treeVariants = buildTreeVariants(seed);
+  const snagIdx = [], liveIdx = [];
+  variants.forEach((v, i) => (v.kind === 'snag' ? snagIdx : liveIdx).push(i));
+  const buckets = variants.map(() => []);
+  const o = new THREE.Object3D();
   list.forEach((t, i) => {
-    const base = terrain.heightAt(t.x, t.z);
-    const trunkH = (6.4 + t.scale * 5.4) * (t.hMul || 1);
-    const lean = t.lean;
-    q.setFromEuler(new THREE.Euler(lean, t.rot, lean * 0.7));
-    p.set(t.x, base + trunkH / 2, t.z);
-    s.set(t.trunkR, trunkH, t.trunkR);
-    m.compose(p, q, s);
-    trunks.setMatrixAt(i, m);
-    const cr = (2.0 + t.scale * 1.4) * (t.crownMul || 1);
-    const ch = trunkH + cr * 0.22;
-    p.set(t.x + lean * trunkH * 0.5, base + ch, t.z + lean * 0.4 * trunkH * 0.5);
-    s.set(cr, cr * (0.52 + t.scale * 0.18), cr);
-    q.setFromEuler(new THREE.Euler(0, t.rot * 2.1, 0));
-    m.compose(p, q, s);
-    crowns.setMatrixAt(i, m);
-    col.setHex(greens[i % greens.length]);
-    col.offsetHSL(0, 0, (i % 7) * 0.012 - 0.03);
-    crowns.setColorAt(i, col);
-    if (t.dead) { crowns.setMatrixAt(i, m.compose(p.set(t.x, -60, t.z), q, s)); }
-    // bare branches partway up the trunk
-    for (let k = 0; k < 3; k++) {
-      const hf = 0.40 + k * 0.17 + ((i * 13) % 7) * 0.012;
-      const ang = t.rot + k * 2.2 + i * 0.7;
-      const len = (0.9 + t.scale * 1.3) * (1 - k * 0.18);
-      dir.set(Math.cos(ang), 0.34, Math.sin(ang)).normalize();
-      help.quaternion.setFromUnitVectors(up, dir);
-      help.scale.set(t.trunkR * 0.45, len, t.trunkR * 0.45);
-      help.position.set(t.x + dir.x * len * 0.45, base + trunkH * hf, t.z + dir.z * len * 0.45);
-      help.updateMatrix();
-      branches.setMatrixAt(i * 3 + k, help.matrix);
+    const vi = t.dead ? snagIdx[i % snagIdx.length] : liveIdx[i % liveIdx.length];
+    const height = (5.2 + t.scale * 4.4) * (t.hMul || 1);
+    o.position.set(t.x, terrain.heightAt(t.x, t.z) - 0.15, t.z);
+    o.rotation.set(t.lean * 2.5, t.rot, t.lean * 1.5);
+    o.scale.setScalar(height);
+    o.updateMatrix();
+    buckets[vi].push(o.matrix.clone());
+  });
+  variants.forEach((v, vi) => {
+    const mats = buckets[vi];
+    if (!mats.length) return;
+    for (const [key, geo] of v.parts) {
+      const mesh = new THREE.InstancedMesh(geo, materials[key] || materials.bark, mats.length);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false;
+      mats.forEach((m, i) => mesh.setMatrixAt(i, m));
+      mesh.instanceMatrix.needsUpdate = true;
+      world.add(mesh);
     }
   });
-  crowns.instanceColor.needsUpdate = true;
-  world.add(trunks); world.add(crowns); world.add(branches);
 
-  // fallen logs + stumps through the woods
-  const logs = [];
+  // ---------- fallen logs + stumps through the woods ----------
+  const logList = [];
   for (let i = 0; i < 34; i++) {
     const x = -CFG.HALF + 5 + ((i * 41.3) % (CFG.WORLD - 10));
     const z = -CFG.HALF + 5 + ((i * 67.7) % (CFG.WORLD - 10));
     const inZone = Math.abs(x + 6) < 34 && Math.abs(z + 10) < 25;
     if (inZone) continue;
-    if (i % 4 === 0) logs.push({ x, z, r: 0.13 + (i % 5) * 0.03, stump: true });
-    else logs.push({ x, z, r: 0.06 + (i % 4) * 0.025, len: 1.6 + (i % 6) * 0.5, ang: (i * 1.7) % Math.PI });
+    if (i % 4 === 0) logList.push({ x, z, r: 0.17 + (i % 5) * 0.04, stump: true, ang: (i * 1.3) % Math.PI });
+    else logList.push({ x, z, r: 0.10 + (i % 4) * 0.035, len: 1.6 + (i % 6) * 0.5, ang: (i * 1.7) % Math.PI });
   }
-  world.add(buildLogs(terrain, logs));
-  world.add(buildStaging(terrain));
+  world.add(buildLogs(terrain, logList, materials));
 
-  // scattered rocks, like a real dig spot
-  const rockGeo = facet(new THREE.IcosahedronGeometry(1, 0));
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x8d8b83, roughness: 0.95, flatShading: true });
-  const rocks = new THREE.InstancedMesh(rockGeo, rockMat, 170);
-  rocks.castShadow = true; rocks.receiveShadow = true;
+  // ---------- rocks ----------
+  const rockList = [];
   for (let i = 0; i < 170; i++) {
     const x = -CFG.HALF + 4 + (i * 37.7 % (CFG.WORLD - 8));
     const z = -CFG.HALF + 4 + (i * 61.3 % (CFG.WORLD - 8));
-    const sc = 0.12 + ((i * 13) % 100) / 100 * 0.42;
-    p.set(x, terrain.heightAt(x, z) + sc * 0.35, z);
-    s.set(sc, sc * 0.7, sc * 1.15);
-    q.setFromEuler(new THREE.Euler(0.2 * i, i * 1.3, 0.1 * i));
-    m.compose(p, q, s);
-    rocks.setMatrixAt(i, m);
+    rockList.push({ x, z, s: 0.16 + ((i * 13) % 100) / 100 * 0.55 });
   }
-  rocks.instanceMatrix.needsUpdate = true;
-  world.add(rocks);
+  world.add(buildRocks(terrain, rockList, materials));
+
+  // ---------- staging gear + tools left in the dirt ----------
+  world.add(buildStaging(terrain, materials));
 }
 
 function makeRing() {
@@ -609,7 +592,7 @@ function init() {
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   const sc = sun.shadow.camera;
-  sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70; sc.near = 1; sc.far = 320;
+  sc.left = -48; sc.right = 48; sc.top = 48; sc.bottom = -48; sc.near = 1; sc.far = 260;
   sun.shadow.bias = -0.0006;
   sun.shadow.normalBias = 0.05;
   scene.add(sun);
@@ -619,6 +602,7 @@ function init() {
   scene.add(fill);
 
   sfx = new SFX();
+  materials = makeMaterials();
   UI.init();
   UI.setLoading('Carving the dirt…', 0.2);
 

@@ -432,8 +432,10 @@ const MEASURE = `(t, x, z, litres) => {
     return { moved: Math.hypot(A.player.pos.x - window.__start.x, A.player.pos.z - window.__start.z),
       calls: A.renderer.info.render.calls };
   });
-  check('the live rAF loop walks the player with real key input', live.moved > 0.05,
-    live.moved.toFixed(2) + ' m (software raster is slow headless)');
+  // software rasterisation runs at a few fps headless, so assert movement at all
+  // rather than a distance that assumes 60 fps
+  check('the live rAF loop walks the player with real key input', live.moved > 0.005,
+    live.moved.toFixed(3) + ' m at a few fps of software raster (not a perf figure)');
 
   // ---------- help + sheet overlays ----------
   await page.keyboard.press('KeyH');
