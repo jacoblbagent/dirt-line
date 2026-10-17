@@ -58,7 +58,7 @@ export const UI = {
   update(state) {
     const { player, planProgress, terrain, mode } = state;
     this.el.tool.textContent = player.tool.name;
-    this.el.mode.textContent = `LMB ${this.verb(player.tool.id)} · RMB place dirt`;
+    this.el.mode.textContent = `LMB ${this.verb(player.tool.id)}\nRMB place dirt`;
     this.el.mode.classList.toggle('pour', player.action === 'place dirt' || player.action === 'trickle');
     this.el.brush.textContent = player.brushRadius.toFixed(2) + ' m';
     this.el.action.textContent = player.working ? player.action : '—';

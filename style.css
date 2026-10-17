@@ -40,8 +40,10 @@ html, body {
 #hudToolRow { display: flex; align-items: baseline; gap: 8px; }
 #hudTool { font-size: 17px; font-weight: 650; letter-spacing: .2px; }
 #hudMode {
-  font-size: 10px; font-weight: 700; letter-spacing: .9px;
-  padding: 2px 6px; border-radius: var(--r);
+  display: block; margin-top: 7px;
+  font-size: 10px; font-weight: 700; letter-spacing: .5px; line-height: 1.5;
+  white-space: pre-line;
+  padding: 4px 7px; border-radius: var(--r);
   background: rgba(255,255,255,.10); color: var(--dim);
 }
 #hudMode.pour { background: rgba(255, 209, 102, .18); color: var(--warn); }
