@@ -235,7 +235,8 @@ function updateRing() {
   const SEG = 64;
   const placing = state.mode === 'play' && state.input.rmb;
   const r = state.mode === 'play'
-    ? (placing ? player.pourRadius : player.brushRadius) : state.planBrushR || 0;
+    ? (placing ? (player.placeRNow || player.pourRadius) : player.brushRadius)
+    : state.planBrushR || 0;
   const visible = aim.hit && (state.mode === 'play');
   ringMesh.visible = visible && r > 0;
   if (!ringMesh.visible) return;
@@ -249,7 +250,11 @@ function updateRing() {
   pos.needsUpdate = true;
   ringMesh.geometry.computeBoundingSphere();
   const mat = ringMesh.material;
-  if (placing) mat.color.setHex(0xffd166);
+  if (placing) {
+    // red while the footprint is inside the hole you dug — the spoil will not go back
+    const blocked = terrain.blockedDump(aim.point.x, aim.point.z, r);
+    mat.color.setHex(blocked ? 0xff5b4a : 0xffd166);
+  }
   else if (player.tool.id === 'flathead') mat.color.setHex(0x9fe8ff);
   else if (player.tool.id === 'rake') mat.color.setHex(0xd8ff9f);
   else if (player.tool.id === 'pickaxe') mat.color.setHex(0xffb3a0);
@@ -532,6 +537,7 @@ function frame(now) {
       speed: Math.hypot(player.vel.x, player.vel.z),
       working: player.working,
       period: player.tool.swing,
+      fill: player.load / player.loadMax,
     });
     camera.position.set(player.pos.x, player.camY, player.pos.z);
     camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');

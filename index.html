@@ -25,11 +25,11 @@
     <div id="hudToolRow">
       <span id="hudTool">Spade</span>
     </div>
-    <div id="hudMode">LMB dig / slap<br>RMB place dirt</div>
+    <div id="hudMode">LMB dig / slap<br>RMB place dirt — outside the hole</div>
     <div class="hudLine"><span>Brush</span><b id="hudBrush">0.55 m</b></div>
     <div class="hudLine"><span>Stamina</span><b id="hudStamina">100%</b></div>
     <div class="bar"><i id="barStamina" style="width:100%"></i></div>
-    <div class="hudLine" style="margin-top:6px"><span>Load <span id="loadText">0 / 130 L</span></span><b id="hudAction">—</b></div>
+    <div class="hudLine" style="margin-top:6px"><span>Shovel <span id="loadText">0 / 60 L</span></span><b id="hudAction">—</b></div>
     <div class="bar"><i id="barLoad" style="width:0"></i></div>
     <div id="hudSoil">looking at the sky</div>
     <div id="hudFeature">no plan yet — click Plan</div>
@@ -57,6 +57,7 @@
       <div><span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> walk · <span class="kbd">Shift</span> run · <span class="kbd">Space</span> hop</div>
       <div style="margin-top:5px"><span class="kbd">1</span><span class="kbd">2</span><span class="kbd">3</span><span class="kbd">4</span> spade · flat head · pick axe · rake</div>
       <div style="margin-top:5px"><span class="kbd">LMB</span> work the ground · <span class="kbd">RMB</span> place dirt</div>
+      <div style="margin-top:5px">dig until the shovel is full, then place it away from the hole</div>
       <div style="margin-top:5px"><span class="kbd">Shift</span>+<span class="kbd">LMB</span> shave a face · wheel size</div>
       <div style="margin-top:5px;color:#7d8b96"><span class="kbd">Esc</span> free the mouse for the buttons below</div>
     </div>
@@ -105,14 +106,16 @@
         <ul>
           <li><b>LMB</b> works the ground with the tool in hand. Spade cuts firm dirt, pick axe breaks hard or packed dirt, rake levels and grooms.</li>
           <li>Dig anywhere you like — in-situ volume really leaves the ground.</li>
-          <li>Spoil goes in your hands (130 L), or into the wheelbarrow (300 L) when you are stood next to it.</li>
+          <li>Dirt piles up <b>in the shovel</b> as you dig: the blade holds 60 L (spade) and you <i>cannot dig again until you have emptied it</i>. Watch the spoil grow on the blade.</li>
+          <li>Stand next to the wheelbarrow and you shovel straight into it instead — 400 L, no stopping.</li>
         </ul>
       </div>
       <div>
         <h3>3 · Place and pack</h3>
         <ul>
-          <li><b>RMB</b> places dirt exactly where you are looking. Wheel sets the radius — down to 0.22 m for precise shaping. <b>Shift</b>+RMB trickles it out.</li>
-          <li>With the barrow in reach, RMB tips that out instead of your hands.</li>
+          <li><b>RMB</b> tips the shovel out where you are looking, and the mound is the <i>same amount of dirt</i> you just took out — one heap, not a smear. Wheel sets the spread.</li>
+          <li>You cannot tip it back into the hole you are digging: the HUD says so and the ring turns red. Walk clear first.</li>
+          <li>With an empty shovel and the barrow in reach, RMB tips the barrow out instead.</li>
           <li>Poured dirt is <i>loose</i> — it slumps under gravity to its angle of repose (~35°).</li>
           <li><b>LMB</b> with the flat head packs it — preferred, and leaves a smooth sheen. The back of the spade also slaps loose dirt down, leaving ridge marks.</li>
           <li><b>Shift</b>+<b>LMB</b> shaves a clean flat cut — lips and landing faces.</li>
@@ -159,14 +162,14 @@
         <h3 style="margin-top:12px">Dig</h3>
         <ul>
           <li><b>LMB</b> digs with the tool in hand</li>
-          <li>Spade soft ground, pick axe hard ground</li>
-          <li>Carry spoil or shovel it into the barrow</li>
+          <li>Spoil fills <b>the shovel</b> — empty it before you can dig again</li>
+          <li>Place it outside the hole, or shovel into the barrow</li>
         </ul>
       </div>
       <div>
         <h3>Shape</h3>
         <ul>
-          <li><b>RMB</b> places dirt — wheel sets the radius</li>
+          <li><b>RMB</b> places your shovel-load as a heap of the same size</li>
           <li>Loose dirt slumps; pack it flat head to hold a face</li>
           <li>Shift+LMB shaves a clean flat cut</li>
         </ul>

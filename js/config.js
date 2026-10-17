@@ -6,11 +6,15 @@ export const CFG = {
   HALF: 64,
   EYE: 1.83,          // 6 ft tall human
   BULK: 1.25,         // excavated soil bulks ~25% (loose litres vs in-situ)
-  PLAYER_LOAD: 160,   // litres a person carries comfortably
+  SHOVEL_LOAD: 60,    // litres of spoil a full blade holds — digging stops while
+                      // the blade is full (each tool sets its own `carry`)
   BARROW_MAX: 400,    // litres in a wheelbarrow
   DIG_RATE: 0.12,     // m of height removed / second at brush centre (÷ resistance)
   POUR_RATE: 62,      // litres / second poured at full hold
   TRICKLE: 0.22,      // multiplier when pouring with right mouse (fine feathering)
+  PILE_TAN: 0.70,     // slope a placed heap settles to — sets the mound footprint
+  HOLE_DEPTH: 0.05,   // m below original grade that counts as "in the hole"
+  HOLE_SHARE: 0.50,   // share of the dump footprint allowed to be in a hole
   SLUMP_MS: 5.0,      // per-frame slumping time budget
   LOOSE_TAN: 0.70,    // tan(35°) — angle of repose for loose spoil
   PACK_GAIN: 3.30,    // tan(66°) — packed faces hold far steeper

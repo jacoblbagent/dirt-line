@@ -1,8 +1,9 @@
 // Tool definitions (gameplay behaviour) + the first-person view model built
 // from the detailed procedural tool and glove models.
-import { MK } from './config.js';
+import { MK, clamp } from './config.js';
 import { groupFromParts } from './materials.js';
 import { TOOL_MODELS, buildGloveHand, TOOL_TIP_Y } from './models-tools.js';
+import { buildDirtHeap } from './models-props.js';
 
 const THREE = window.THREE;
 
@@ -14,24 +15,28 @@ export const TOOLS = [
     tip: 'Dig soft ground. Back of the blade slaps a face firm (ridged marks).',
     power: 1.00, hardBias: -0.50, loosen: 1.0, digMark: MK.DIG,
     packRate: 130, packMark: MK.SPADE, swing: 0.56, effort: 6.0, reach: 1.5,
+    carry: 60,          // litres the blade holds before you have to empty it
   },
   {
     id: 'flathead', name: 'Flat Head', key: '2',
     tip: 'Best packer — smooth flat face. Slap or shave a lip clean.',
     power: 0.45, hardBias: -0.30, loosen: 0.4, digMark: MK.DIG,
     packRate: 285, packMark: MK.FLAT, swing: 0.30, effort: 5.0, reach: 1.6,
+    carry: 45,
   },
   {
     id: 'pickaxe', name: 'Pick Axe', key: '3',
     tip: 'Break hard / compacted ground. Loosens soil so digging gets easier.',
     power: 1.60, hardBias: 0.95, loosen: 2.6, digMark: MK.PICK,
     packRate: 70, packMark: MK.PICK, swing: 0.62, effort: 9.0, reach: 1.7,
+    carry: 70,
   },
   {
     id: 'rake', name: 'Rake', key: '4',
     tip: 'Level and groom — drags high spots into hollows, grooves the finish.',
     power: 0.30, hardBias: -0.40, loosen: 0.6, digMark: MK.DIG,
     packRate: 60, packMark: MK.RAKE, swing: 0.42, effort: 4.0, reach: 1.9,
+    carry: 25,
   },
 ];
 
@@ -40,6 +45,15 @@ export const TOOLS = [
 // origin, so its mesh slides down its own axis until the hand is out at the end
 // of the handle — which is how you actually hold a pick, head away from you.
 const GRIP_SLIDE = { pickaxe: -0.72, rake: -0.14 };
+
+// Where a load of spoil sits on the tool, in each model's own frame (origin at
+// the grip, -Y toward the head). This is the dirt you can see in the shovel.
+const BLADE_SOIL = {
+  spade: [0, -0.40, 0.005],
+  flathead: [0, -0.38, 0.005],
+  pickaxe: [0, 0.05, 0.03],
+  rake: [0, -0.36, 0.02],
+};
 
 // A tool as a mesh group (used for the held view model and for tools left
 // standing in the dirt as scenery).
@@ -60,6 +74,7 @@ export class ViewModel {
   constructor(camera, materials) {
     this.materials = materials;
     this.groups = {};
+    this.soil = {};
     this.root = new THREE.Group();
     this.root.frustumCulled = false;
     this.pivot = new THREE.Group();
@@ -70,6 +85,15 @@ export class ViewModel {
       g.position.y = GRIP_SLIDE[id] || 0;
       g.visible = false;
       g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+      // the spoil actually sitting on the blade / in the shovel — grows as you
+      // dig and disappears when you empty it
+      const off = BLADE_SOIL[id] || [0, -0.35, 0];
+      const soil = new THREE.Mesh(buildDirtHeap(0.088, 17, { height: 0.62 }), materials.bark);
+      soil.position.set(off[0], off[1], off[2]);
+      soil.castShadow = false; soil.receiveShadow = false;
+      soil.visible = false;
+      g.add(soil);
+      this.soil[id] = soil;
       this.groups[id] = g;
       this.pivot.add(g);
     }
@@ -160,5 +184,14 @@ export class ViewModel {
 
     this.root.position.x = this.pose.hold.x + swayX * 0.4;
     this.root.position.y = this.pose.hold.y + swayY;
+
+    // spoil in the shovel, sized by what the tool is actually carrying
+    const fill = clamp(opts.fill || 0, 0, 1);
+    const soil = this.soil[this.toolId];
+    if (soil) {
+      soil.visible = fill > 0.02;
+      const s = 0.34 + 0.95 * fill;
+      soil.scale.set(s, s * 1.5, s);
+    }
   }
 }

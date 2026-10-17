@@ -53,8 +53,11 @@ html, body {
 .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .12s linear; }
 .bar i.low { background: var(--bad); }
 #barLoad { background: #a5814f; }
+#barLoad.full { background: var(--warn); }
+#loadText.full { color: var(--warn); }
 #hudSoil { margin-top: 8px; font-size: 11px; color: var(--dim); }
 #hudSoil.loose { color: var(--warn); }
+#hudSoil.inhole { color: var(--bad); }
 #hudFeature { margin-top: 4px; font-size: 11px; color: var(--accent); }
 #statLine { margin-top: 4px; font-size: 10.5px; color: #7d8b96; }
 

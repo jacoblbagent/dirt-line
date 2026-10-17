@@ -334,46 +334,117 @@ const MEASURE = `(t, x, z, litres) => {
     collide.minD > collide.trunkR + 0.15 && !collide.crossed && collide.travelled < 2.6,
     `stopped ${collide.minD.toFixed(2)} m from the trunk after ${collide.travelled.toFixed(2)} m of pushing`);
 
-  // ---------- carrying dirt the whole way ----------
-  const loop = await page.evaluate(() => {
+  // ---------- the shovel is the rule: one load, empty it, then dig again ----------
+  // Drive the aim by hand (a player walking the lip moves the aim anyway) so the
+  // dig lands on fresh firm ground each time, exactly like digging across a face.
+  const shovel = await page.evaluate(() => {
     const A = window.__app, t = A.terrain, p = A.player;
-    const x = 6, z = 6;
-    p.load = 0; p.stamina = 100;
-    p.pos.set(x, t.heightAt(x, z), z);
-    p.yaw = Math.PI; p.pitch = -1.3;
-    p.brushRadius = 0.6;
+    p.toolIdx = 0; p.load = 0; p.stamina = 100;
+    p.brushRadius = 0.6; p.pourRadius = 0.84;
+    p.pos.set(0, t.heightAt(0, 10), 10);
     const inp = A.state.input;
-    inp.keys = {}; inp.lmb = true; inp.rmb = false; inp.dx = 0; inp.dy = 0;
-    for (let i = 0; i < 180; i++) { p.update(1 / 60, inp, A.treeData); p.useTools(1 / 60, inp, null); }
-    const dug = p.load;
-    t.slump(30); t.refreshGeometry();
-    // deepest drop within reach of where the digger stood
-    let hole = 0;
-    for (let dx = -1.6; dx <= 1.6; dx += 0.2) for (let dz = -1.6; dz <= 1.6; dz += 0.2) {
-      const hx = x + dx, hz = z + dz;
-      const b2 = t.h0[t.idx(Math.round(t.colOf(hx)), Math.round(t.rowOf(hz)))];
-      hole = Math.max(hole, b2 - t.heightAt(hx, hz));
+    inp.keys = {}; inp.dx = 0; inp.dy = 0; inp.lmb = true; inp.rmb = false;
+    const at = (tx, tz) => { p.aim.point.set(tx, t.heightAt(tx, tz), tz); p.aim.hit = true; return [tx, tz]; };
+    const work = n => { for (let i = 0; i < n; i++) p.useTools(1 / 60, inp, null); };
+    const spots = [[-10, 4], [-12.6, 4.4], [-15.2, 4], [-7.4, 4.4]];
+    let used = 0;
+    for (const [sx, sz] of spots) { at(sx, sz); work(40); if (!p.full()) used++; }
+    const cap = p.loadMax, filled = p.load, full = p.full(), fillMsg = p.message;
+    // now try a completely fresh hole with the shovel still full
+    at(-20, -6);
+    const hBefore = t.heightAt(-20, -6), before = p.load;
+    work(90);
+    const stoppedMsg = p.message;
+    const dugNothing = hBefore - t.heightAt(-20, -6);
+    // deepest point of the hole that was actually dug
+    let hx = -10, hz = 4, deep = 0;
+    for (let dx = -20; dx <= -6; dx += 0.5) for (let dz = 0; dz <= 8; dz += 0.5) {
+      const px = dx, pz = dz;
+      const d = t.h0[t.idx(Math.round(t.colOf(px)), Math.round(t.rowOf(pz)))] - t.heightAt(px, pz);
+      if (d > deep) { deep = d; hx = px; hz = pz; }
     }
-    p.pourRadius = 0.6;
-    const tx = x + 3, tz = z + 3;
-    p.pos.set(tx, t.heightAt(tx, tz), tz);
-    const before = t.heightAt(tx, tz);
-    const base = t.h0[t.idx(t.colOf(tx), t.rowOf(tz))];
+    t.slump(30); t.refreshGeometry();
+    inp.lmb = false;
+    return { cap, filled, full, fillMsg, stoppedMsg, dugNothing, holes: used,
+      hole: deep, hx, hz, load: p.load, before, stats: p.stats.litresDug };
+  });
+  check('digging fills the shovel', shovel.filled >= shovel.cap - 0.5 && shovel.full,
+    `${shovel.filled.toFixed(1)} L of ${shovel.cap} L on the blade`);
+  check('a full shovel will not dig another hole',
+    shovel.dugNothing < 0.001 && shovel.load === shovel.before && /full/i.test(shovel.stoppedMsg),
+    `held LMB on fresh ground: ${shovel.dugNothing.toFixed(4)} m moved · "${shovel.stoppedMsg}"`);
+  check('taking a scoop leaves a real hole behind', shovel.hole > 0.02,
+    shovel.hole.toFixed(2) + ' m deep at ' + shovel.hx.toFixed(1) + ',' + shovel.hz.toFixed(1));
+
+  // the spoil on the blade is visible in the shovel (the live loop feeds the view model)
+  await page.waitForTimeout(1200);
+  const bladeDirt = await page.evaluate(() => {
+    const A = window.__app, s = A.vm.soil.spade;
+    return { visible: s.visible, s: +s.scale.x.toFixed(2), load: A.player.load };
+  });
+  check('the dirt you dug is visibly sitting in the shovel',
+    bladeDirt.visible && bladeDirt.s > 0.8, `blade heap scaled ${bladeDirt.s} carrying ${bladeDirt.load.toFixed(0)} L`);
+
+  // ---------- you cannot shovel it back into the hole you are digging ----------
+  const refuse = await page.evaluate((pit) => {
+    const A = window.__app, t = A.terrain, p = A.player;
+    const hx = pit[0], hz = pit[1];              // straight into the pit just dug
+    p.aim.point.set(hx, t.heightAt(hx, hz), hz); p.aim.hit = true;
+    const inp = A.state.input;
+    inp.keys = {}; inp.lmb = false; inp.rmb = true;
+    const before = p.load, hBefore = t.heightAt(hx, hz), share = t.cutShare(hx, hz, p.placeRNow);
+    for (let i = 0; i < 90; i++) p.useTools(1 / 60, inp, null);
+    const msg = p.message;
+    inp.rmb = false;
+    return { before, after: p.load, rose: t.heightAt(hx, hz) - hBefore, msg, share, action: p.action };
+  }, [shovel.hx, shovel.hz]);
+  check('spoil will not go back into the hole you are digging',
+    refuse.after === refuse.before && refuse.rose < 0.002 && /hole/i.test(refuse.msg),
+    `still carrying ${refuse.after.toFixed(0)} L · "${refuse.msg}"`);
+
+  // ---------- dumped outside, the mound is the dirt you took out ----------
+  const mound = await page.evaluate(() => {
+    const A = window.__app, t = A.terrain, p = A.player;
+    const tx = 14, tz = 14;                      // clean ground, well clear of the pit
+    p.pos.set(tx - 2.4, t.heightAt(tx - 2.4, tz), tz);
     p.aim.point.set(tx, t.heightAt(tx, tz), tz); p.aim.hit = true;
-    // RMB is the one and only "place dirt" control now
-    inp.lmb = false; inp.rmb = true;
-    for (let i = 0; i < 400; i++) p.useTools(1 / 60, inp, null);
+    const load = p.load, L = load / 1000 / 1.25; // in-situ m³ that left the ground
+    const base = t.h0[t.idx(Math.round(t.colOf(tx)), Math.round(t.rowOf(tz)))];
+    const rDep = t.moundRadius(load, p.pourRadius);
+    const inp = A.state.input;
+    inp.keys = {}; inp.lmb = false; inp.rmb = true;
+    for (let i = 0; i < 300; i++) p.useTools(1 / 60, inp, null);
+    inp.rmb = false;
     for (let i = 0; i < 60; i++) t.slump(20);
     t.refreshGeometry();
-    const left = p.load;
-    inp.rmb = false;
-    return { dug, left, hole, mound: t.heightAt(tx, tz), base, before, stats: p.stats.litresDug };
+    const lift = t.heightAt(tx, tz) - base;
+    // volume of the mound, cell by cell, against what was dug
+    let vol = 0;
+    for (let dz = -3; dz <= 3; dz += 0.5) for (let dx = -3; dx <= 3; dx += 0.5) {
+      const px = tx + dx, pz = tz + dz;
+      const i = t.idx(Math.round(t.colOf(px)), Math.round(t.rowOf(pz)));
+      const d = t.heightAt(px, pz) - t.h0[i];
+      if (d > 0.01) vol += d * t.cell * t.cell;
+    }
+    const effR = Math.sqrt(L / (Math.PI * Math.max(lift, 0.01)));
+    return { load, left: p.load, L, lift, vol, effR, rDep, inHole: t.cutShare(tx, tz, rDep) };
   });
-  check('digging fills the digger\'s load', loop.dug > 30, loop.dug.toFixed(1) + ' L');
-  check('pouring empties the load', loop.left < 5, `${loop.dug.toFixed(0)} → ${loop.left.toFixed(1)} L`);
-  check('a real hole is left behind', loop.hole > 0.12, loop.hole.toFixed(2) + ' m deep');
-  check('placed dirt builds a mound above original ground', loop.mound > loop.base + 0.05,
-    `+${(loop.mound - loop.base).toFixed(3)} m`);
+  check('a shovel-load dumped outside stands as a heap, not a smear',
+    mound.lift > 0.10 && mound.effR < 0.6,
+    `+${mound.lift.toFixed(2)} m high, spread out to ~${mound.effR.toFixed(2)} m`);
+  check('the mound is the same amount of dirt that left the hole',
+    Math.abs(mound.vol - mound.L) / mound.L < 0.12,
+    `${mound.vol.toFixed(4)} m³ of mound for ${mound.L.toFixed(4)} m³ dug (${mound.load.toFixed(0)} L on the blade)`);
+  check('the heap fits the footprint the ring showed', mound.rDep < 0.7,
+    `ring r ${mound.rDep.toFixed(2)} m`);
+  await page.waitForTimeout(1200);
+  const emptied = await page.evaluate(() => {
+    const A = window.__app, s = A.vm.soil.spade;
+    return { visible: s.visible, load: A.player.load, width: +s.scale.x.toFixed(2) };
+  });
+  check('emptying the shovel takes the dirt back off the blade',
+    emptied.load < 4 && (!emptied.visible || emptied.width < 0.4),
+    `${emptied.load.toFixed(1)} L left, blade heap ${emptied.visible ? emptied.width : 'hidden'}`);
 
   // ---------- wheelbarrow ----------
   const barrow = await page.evaluate(() => {
@@ -393,22 +464,39 @@ const MEASURE = `(t, x, z, litres) => {
     p.pos.set(40, t.heightAt(40, 40), 40);
     p.toggleBarrow();            // out of range → message only
     const stillPlaced = b.placed;
-    // load the barrow then tip it out
+    // back at the barrow, which now stands right beside the hole you dug:
+    // find the pit and aim the barrow straight into it
     b.fill = 300;
-    const heightBefore = t.heightAt(10, 30);
     p.pos.set(10, t.heightAt(10, 30), 30);
-    p.aim.point.set(10, t.heightAt(10, 30), 30); p.aim.hit = true;
+    let px = 10, pz = 30, deep = 0;
+    for (let dx = -3; dx <= 3; dx += 0.5) for (let dz = -3; dz <= 3; dz += 0.5) {
+      const qx = 10 + dx, qz = 30 + dz;
+      const i = t.idx(Math.round(t.colOf(qx)), Math.round(t.rowOf(qz)));
+      const d = t.h0[i] - t.heightAt(qx, qz);
+      if (d > deep) { deep = d; px = t.xOf(Math.round(t.colOf(qx))); pz = t.zOf(Math.round(t.rowOf(qz))); }
+    }
+    p.aim.point.set(px, t.heightAt(px, pz), pz); p.aim.hit = true;
+    p.toggleBarrow();            // aimed into the hole → refused
+    const refused = b.fill, pitMsg = p.message;
+    // tip it out onto clean ground instead
+    const tx = 13.5, tz = 33.5;
+    p.aim.point.set(tx, t.heightAt(tx, tz), tz); p.aim.hit = true;
     p.toggleBarrow();
     for (let i = 0; i < 40; i++) t.slump(20);
     t.refreshGeometry();
     let lift = 0;
-    for (let dx = -1.5; dx <= 1.5; dx += 0.3) for (let dz = -1.5; dz <= 1.5; dz += 0.3)
-      lift = Math.max(lift, t.heightAt(10 + dx, 30 + dz) - heightBefore);
-    return { fill, load, stillPlaced, tipped: b.fill, mound: lift };
+    for (let dx = -2; dx <= 2; dx += 0.3) for (let dz = -2; dz <= 2; dz += 0.3) {
+      const px = tx + dx, pz = tz + dz;
+      const i = t.idx(Math.round(t.colOf(px)), Math.round(t.rowOf(pz)));
+      lift = Math.max(lift, t.heightAt(px, pz) - t.h0[i]);
+    }
+    return { fill, load, stillPlaced, refused, pitMsg, tipped: b.fill, mound: lift };
   });
   check('shovelling near the barrow loads the barrow, not your hands',
     barrow.fill > 100 && barrow.fill > barrow.load, `barrow ${barrow.fill.toFixed(0)} L, hands ${barrow.load.toFixed(1)} L`);
   check('barrow cannot be picked up out of reach', barrow.stillPlaced);
+  check('the barrow will not tip its load into the hole you dug',
+    barrow.refused === 300 && /hole/i.test(barrow.pitMsg), barrow.pitMsg);
   check('tipping the barrow dumps its load where you aim',
     barrow.tipped < 5 && barrow.mound > 0.05, `${barrow.tipped.toFixed(1)} L left, +${barrow.mound.toFixed(2)} m`);
 

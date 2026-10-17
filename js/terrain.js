@@ -474,6 +474,51 @@ export class Terrain {
 
   resist(i) { return 0.42 + this.hd[i] / 255 * 1.15 + this.p[i] / 255 * 0.72; }
 
+  // Radius of the mound a given volume of loose spoil makes when it is dropped
+  // in one place: a heap at its angle of repose, V = (π/3)·r²·(tan·r). This is
+  // what makes a placed scoop read as the same amount of dirt you took out —
+  // the footprint comes from the volume, so the mound gets taller, not thinner.
+  moundRadius(litres, cap) {
+    const V = Math.max(0, litres) / 1000 / CFG.BULK;
+    const r = Math.cbrt(3 * V / (Math.PI * CFG.PILE_TAN));
+    return clamp(r, Math.min(0.30, cap), cap);
+  }
+
+  // Share of a dump footprint that is cut below original grade — i.e. how much
+  // of it sits inside a hole you have dug. You cannot shovel spoil straight
+  // back into the hole you are digging, so placement is refused above HOLE_SHARE.
+  cutShare(x, z, r) {
+    const [c0, c1, r0, r1] = this.cellRange(x, z, r);
+    const cellArea = this.cell * this.cell;
+    let cut = 0, total = 0;
+    for (let rr = r0; rr <= r1; rr++) {
+      const wz = this.zOf(rr);
+      for (let cc = c0; cc <= c1; cc++) {
+        const wx = this.xOf(cc);
+        const dx = wx - x, dz = wz - z;
+        if (dx * dx + dz * dz > r * r) continue;
+        const i = rr * this.N + cc;
+        total += cellArea;
+        if (this.h0[i] - this.h[i] > CFG.HOLE_DEPTH) cut += cellArea;
+      }
+    }
+    return total ? cut / total : 0;
+  }
+
+  // Is the ground right under this point dug out below original grade?
+  cutAt(x, z) {
+    const c = clamp(Math.round(this.colOf(x)), 0, this.N - 1);
+    const r = clamp(Math.round(this.rowOf(z)), 0, this.N - 1);
+    const i = r * this.N + c;
+    return this.h0[i] - this.h[i] > CFG.HOLE_DEPTH;
+  }
+
+  // Refuse to dump spoil into the hole it came out of: aiming into dug ground
+  // (or dropping most of a wide load into one) is not placement, it is a no-op.
+  blockedDump(x, z, r) {
+    return this.cutAt(x, z) || this.cutShare(x, z, r) > CFG.HOLE_SHARE;
+  }
+
   // Excavate. Returns litres of loose spoil collected.
   dig(x, z, r, tool, dt, out) {
     const [c0, c1, r0, r1] = this.cellRange(x, z, r);

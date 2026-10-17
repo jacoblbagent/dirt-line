@@ -9,7 +9,7 @@ mkdir -p /tmp/verify && cd /tmp/verify && npm init -y && npm i playwright-core@1
 cp ~/Code/dirt-jumps/tests/verify.js /tmp/verify/ && cd /tmp/verify && node verify.js
 ```
 
-- `verify.js` — 51 mechanic checks against `http://127.0.0.1:5187` (override with `APP_URL`).
+- `verify.js` — 63 mechanic checks against `http://127.0.0.1:5187` (override with `APP_URL`).
 - `deployed-check.js` — smoke test a deployed URL: dig → pour → pack → plan → save/load.
 - `shots.js` — builds a jump line in-page and captures review screenshots.
 

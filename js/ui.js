@@ -68,22 +68,33 @@ export const UI = {
       const p = terrain.packedAt(aim.point.x, aim.point.z);
       const slope = terrain.slopeAt(aim.point.x, aim.point.z);
       const angle = Math.atan(slope) * 180 / Math.PI;
-      const lift = aim.point.y - terrain.heightAt(aim.point.x, aim.point.z);
+      // spoil will not go back into the hole it came out of
+      const inHole = terrain.blockedDump(aim.point.x, aim.point.z,
+        player.placeRNow || player.brushRadius);
       this.el.soil.textContent =
         `packed ${(p / 255 * 100).toFixed(0)}%   face ${angle.toFixed(0)}°   ` +
-        `${p > 190 ? 'FIRM' : p > 90 ? 'holding' : 'LOOSE — will slump'}`;
+        `${p > 190 ? 'FIRM' : p > 90 ? 'holding' : 'LOOSE — will slump'}` +
+        (inHole ? '   · in the hole you dug — dump it outside' : '');
       this.el.soil.classList.toggle('loose', p <= 90);
+      this.el.soil.classList.toggle('inhole', inHole);
     } else {
       this.el.soil.textContent = 'looking at the sky';
       this.el.soil.classList.remove('loose');
+      this.el.soil.classList.remove('inhole');
     }
     this.el.cross.classList.toggle('active', !!aim.hit);
 
     this.el.stamina.style.width = player.stamina.toFixed(0) + '%';
     this.el.stamina.classList.toggle('low', player.stamina < 22);
     if (this.el.staminaNum) this.el.staminaNum.textContent = player.stamina.toFixed(0) + '%';
-    this.el.load.style.width = (player.load / player.loadMax * 100).toFixed(0) + '%';
-    this.el.loadText.textContent = `${player.load.toFixed(0)} / ${player.loadMax} L`;
+    const cap = player.loadMax;
+    const full = player.load >= cap - 0.5;
+    this.el.load.style.width = Math.min(100, player.load / cap * 100).toFixed(0) + '%';
+    this.el.load.classList.toggle('full', full);
+    this.el.loadText.classList.toggle('full', full);
+    this.el.loadText.textContent = full
+      ? `${player.load.toFixed(0)} / ${cap} L — FULL · RMB to place`
+      : `${player.load.toFixed(0)} / ${cap} L`;
 
     const b = player.barrow;
     if (b.placed) {

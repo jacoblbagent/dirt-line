@@ -20,8 +20,8 @@ export class Player {
     this.radius = 0.34;
     this.onGround = true;
     this.stamina = 100;
-    this.load = 0;           // litres of loose spoil carried
-    this.loadMax = CFG.PLAYER_LOAD;
+    this.load = 0;           // litres of loose spoil on the tool's blade
+    this.placeRNow = 0.5;    // footprint RMB would use right now (ring indicator)
     this.toolIdx = 0;
     this.brushRadius = 0.55; // working brush — also drives the dump radius
     this.pourRadius = 0.77;  // deposit brush, derived from the working brush
@@ -66,6 +66,26 @@ export class Player {
   }
 
   get tool() { return TOOLS[this.toolIdx]; }
+
+  // How much spoil the blade in hand holds. Digging stops when it is full —
+  // the tool, not an invisible number, is what limits you.
+  get loadMax() { return this.tool.carry; }
+
+  // A barrow stood beside you is the exception: you shovel straight into it.
+  barrowRoom() {
+    const b = this.barrow;
+    return b.placed && this.barrowDist() < 3.0 && b.fill < CFG.BARROW_MAX - 0.5;
+  }
+
+  full() { return this.load >= this.loadMax - 0.5 && !this.barrowRoom(); }
+
+  // What RMB would tip out: the blade first, then a barrow in reach.
+  placeSource() {
+    const b = this.barrow;
+    if (this.load > 0.4) return { src: 'blade', have: this.load };
+    if (b.placed && this.barrowDist() < 3.4 && b.fill > 0.5) return { src: 'barrow', have: b.fill };
+    return { src: 'none', have: 0 };
+  }
 
   // one wheel drives both the working brush and the (slightly wider) dump brush,
   // so there is nothing extra to press for precise placement
@@ -231,6 +251,10 @@ export class Player {
     const eye = this.eyePos(this._aimOrigin || new THREE.Vector3());
     this.rayMarch(eye, this._fwd, this.tool.reach + (this.mode === 'pour' ? 1.6 : 0.6), this.aim);
 
+    // what RMB would put down right now — the draped ring shows this footprint
+    const ps = this.placeSource();
+    this.placeRNow = this.terrain.moundRadius(ps.src === 'none' ? this.loadMax : ps.have, this.pourRadius);
+
     this.camY = this.pos.y + (this.crouch ? 1.28 : CFG.EYE) + Math.sin(this.bob) * bobAmt;
   }
 
@@ -240,8 +264,8 @@ export class Player {
 
   // ---------- work ----------
   // Three rules, no modes:
-  //   LMB        work the ground with the current tool
-  //   RMB        place the dirt you carry (or tip the barrow out)
+  //   LMB        work the ground with the current tool (stops while the blade is full)
+  //   RMB        place the spoil on the blade (or tip the barrow out) — outside the hole
   //   Shift+LMB  shave a clean flat face; Shift+RMB trickles
   useTools(dt, input, sfx) {
     this.working = false;
@@ -253,24 +277,33 @@ export class Player {
     TL.angle = angle;
     const fine = !!input.keys['ShiftLeft'] || !!input.keys['ShiftRight'];
 
-    // ---- RMB, whatever tool is in hand: put dirt where you are looking ----
+    // ---- RMB, whatever tool is in hand: put the spoil you carry on the ground ----
     if (input.rmb) {
-      const src = this.barrow.placed && this.barrowDist() < 3.4 && this.barrow.fill > 0.5
-        ? 'barrow' : 'load';
-      const have = src === 'barrow' ? this.barrow.fill : this.load;
-      if (have < 0.4) {
+      const src = this.placeSource();
+      const rDep = t.moundRadius(src.have || this.loadMax, this.pourRadius);
+      this.placeRNow = rDep;
+      if (src.src === 'none') {
         this.say('Nothing to place — dig some dirt first');
-      } else {
-        let rate = CFG.POUR_RATE * (src === 'barrow' ? 1.9 : 1.0);
-        if (fine) rate *= CFG.TRICKLE;
-        const litres = Math.min(rate * dt, have);
-        const used = t.pour(x, z, this.pourRadius, litres, { mark: MK.LOOSE, angle });
-        if (src === 'barrow') this.barrow.fill -= used; else this.load -= used;
-        this.stats.litresPlaced += used;
-        this.working = true;
-        this.action = fine ? 'trickle' : 'place dirt';
-        if (sfx) sfx.pour(dt);
+        return;
       }
+      // the spoil you just dug cannot go straight back into the hole you dug it from
+      if (t.blockedDump(x, z, rDep)) {
+        this.say('That is the hole you are digging — dump it outside', 2.2);
+        this.action = 'blocked';
+        return;
+      }
+      let rate = CFG.POUR_RATE * (src.src === 'barrow' ? 1.9 : 1.0);
+      if (fine) rate *= CFG.TRICKLE;
+      const litres = Math.min(rate * dt, src.have);
+      // the mound's footprint comes from the volume, so it stands as a heap of
+      // exactly the dirt you took out rather than a pancake
+      const used = t.pour(x, z, rDep, litres, { mark: MK.LOOSE, angle });
+      if (src.src === 'barrow') this.barrow.fill = Math.max(0, this.barrow.fill - used);
+      else this.load = Math.max(0, this.load - used);
+      this.stats.litresPlaced += used;
+      this.working = true;
+      this.action = fine ? 'trickle' : 'place dirt';
+      if (sfx) sfx.pour(dt);
       return;
     }
 
@@ -278,10 +311,11 @@ export class Player {
 
     // ---- Shift + LMB: precision flat cut — lips, landings, face trimming ----
     if (fine && TL.id !== 'pickaxe') {
+      if (this.full()) { this.say(this.fullMsg()); return; }
       const litres = t.shave(x, z, this.brushRadius, 0.055, TL);
       const nearBarrow = this.barrow.placed && this.barrowDist() < 3.0 && this.barrow.fill < CFG.BARROW_MAX;
       if (nearBarrow) this.barrow.fill = Math.min(CFG.BARROW_MAX, this.barrow.fill + litres);
-      else this.load = Math.min(this.loadMax, this.load + litres);
+      else this.load = Math.min(Math.max(this.loadMax, this.load), this.load + litres);
       this.stats.litresDug += litres;
       this.working = true; this.action = 'shave';
       if (sfx) sfx.shave(dt);
@@ -295,8 +329,8 @@ export class Player {
       if (loose) {
         const any = t.pack(x, z, this.brushRadius * 1.05, Object.assign({}, TL, { packMark: MK.SPADE }), dt);
         if (any) { this.working = true; this.action = 'slap'; this.stats.litresPacked += dt * 12; if (sfx) sfx.pack(dt); }
-      } else if (!this.roomFor()) {
-        this.say('Hands full — place the dirt or drop it in the barrow');
+      } else if (this.full()) {
+        this.say(this.fullMsg());
       } else {
         const l = t.dig(x, z, this.brushRadius, TL, dt);
         this.takeDirt(l);
@@ -307,7 +341,7 @@ export class Player {
       const any = t.pack(x, z, this.brushRadius, TL, dt);
       if (any) { this.working = true; this.action = 'pack'; this.stats.litresPacked += dt * 14; if (sfx) sfx.pack(dt); }
     } else if (TL.id === 'pickaxe') {
-      if (!this.roomFor()) { this.say('Hands full — place the dirt first'); }
+      if (this.full()) this.say(this.fullMsg());
       else {
         const l = t.dig(x, z, this.brushRadius, TL, dt);
         this.takeDirt(l);
@@ -320,26 +354,21 @@ export class Player {
     }
   }
 
-  roomFor() {
-    const loadSpace = this.loadMax - this.load;
-    const near = this.barrow.placed && this.barrowDist() < 3.0;
-    const barrowSpace = near ? CFG.BARROW_MAX - this.barrow.fill : 0;
-    return loadSpace + barrowSpace > 0.6;
+  fullMsg() {
+    return `${this.tool.name} is full (${this.load.toFixed(0)} / ${this.loadMax} L) — ` +
+      'place it with RMB, outside the hole';
   }
 
   takeDirt(litres) {
     if (litres <= 0) return;
-    const near = this.barrow.placed && this.barrowDist() < 3.0;
-    const barrowSpace = near ? CFG.BARROW_MAX - this.barrow.fill : 0;
     let rest = litres;
-    if (barrowSpace > 0) {
-      const into = Math.min(barrowSpace, rest);
-      this.barrow.fill += into;
-      rest -= into;
-      this.updateBarrowMesh();
+    if (this.barrow.placed && this.barrowDist() < 3.0) {
+      const into = Math.min(CFG.BARROW_MAX - this.barrow.fill, rest);
+      if (into > 0) { this.barrow.fill += into; rest -= into; this.updateBarrowMesh(); }
     }
-    const into = Math.min(this.loadMax - this.load, rest);
-    this.load += into;
+    // whatever is left lands on the blade, which is what limits further digging
+    const cap = Math.max(this.loadMax, this.load);
+    this.load = Math.min(cap, this.load + rest);
     this.stats.litresDug += litres;
   }
 
@@ -349,9 +378,14 @@ export class Player {
       // empty it onto the ground in front of you, or pick it up if empty
       if (this.barrow.fill > 0.5) {
         const p = this.aim.hit ? this.aim.point : this.pos;
-        const used = this.terrain.pour(p.x, p.z, 0.9, this.barrow.fill, { mark: MK.LOOSE });
-        this.barrow.fill -= used;
-        this.say(`Tipped the barrow out — ${(used).toFixed(0)} L placed`);
+        const rDep = this.terrain.moundRadius(this.barrow.fill, 0.95);
+        if (this.terrain.blockedDump(p.x, p.z, rDep)) {
+          this.say('That is the hole you are digging — tip it out somewhere else');
+        } else {
+          const used = this.terrain.pour(p.x, p.z, rDep, this.barrow.fill, { mark: MK.LOOSE });
+          this.barrow.fill = Math.max(0, this.barrow.fill - used);
+          this.say(`Tipped the barrow out — ${(used).toFixed(0)} L placed`);
+        }
       } else {
         this.barrow.placed = false;
         this.say('Wheelbarrow picked up — use the Barrow button to set it down');

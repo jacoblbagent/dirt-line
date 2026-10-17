@@ -68,12 +68,16 @@ per-object vertex/NaN report, and is what the screenshots above were taken from.
    ground, pick axe for hard or already-packed ground (it also loosens soil so later
    digging goes easier). Dirt leaves the ground: the hole you dig *is* the dirt you
    build with (in-situ volume, 25% bulking).
-3. **Haul** — spoil goes in your hands (160 L) or gets shovelled into the
-   wheelbarrow (the **Barrow** button places it, 400 L). Digging next to the barrow
-   loads it.
-4. **Place** — `RMB` puts dirt exactly where you are looking, with any tool in hand.
-   The dump radius is fully yours: wheel from a 3.2 m blanket down to a 0.22 m
-   pinch. `Shift`+`RMB` trickles it out. Aim at a jump and it lands on the jump.
+3. **Haul** — the spoil piles up **in the shovel**: you can see it sitting on the
+   blade and it grows as you dig. A spade blade holds 60 L, the pick axe 70 L, and
+   while the blade is full *you cannot dig another scrape* — `LMB` just tells you to
+   empty it. Stand next to the wheelbarrow instead and you shovel straight into it
+   (400 L, no stopping).
+4. **Place** — `RMB` tips what you carry where you are looking, and the mound is the
+   same amount of dirt you dug: the heap's footprint comes from its volume, so 60 L
+   lands as a real pile rather than a smear. **You cannot tip it back into the hole
+   you are digging** — the HUD says so and the placement ring turns red; walk clear
+   first. The wheel sets the spread, `Shift`+`RMB` trickles it out.
 5. **Pack** — poured dirt is *loose*: it slumps under gravity to its angle of
    repose (~38°) and keeps falling until it stops. `LMB` with the flat head packs it
    (preferred, smooth sheen); the back of the spade slaps it down too, leaving ridge
@@ -92,8 +96,8 @@ Three rules and a small keyboard — everything else is a button.
 | `W A S D` | walk (`Shift` run, `Ctrl` crouch, `Space` hop) |
 | mouse | look (click once to lock the pointer, `Esc` to free it) |
 | `1 2 3 4` | spade / flat head / pick axe / rake |
-| `LMB` | work the ground with the tool in hand |
-| `RMB` | place dirt where you are looking (trickle with `Shift`) |
+| `LMB` | work the ground with the tool in hand (stops while the blade is full) |
+| `RMB` | place the spoil you carry, outside the hole (trickle with `Shift`) |
 | `Shift`+`LMB` | shave a flat face |
 | wheel | radius — brush size and dump radius together |
 | **buttons** | Plan · Plan sheet · Barrow · Map · Save · Load · Help |
@@ -105,6 +109,19 @@ again. The plan sheet is click-through, so you can leave it open as a reference
 while you work the dirt.
 
 ![Controls](docs/screenshot-controls.png)
+
+## The shovel is the rule
+
+Spoil lands on the blade as you dig, and the blade is what limits you: a full
+shovel cannot take another scrape until you have emptied it. Place it and the
+mound is the dirt you took out — the heap's radius is derived from its volume
+(`r = ∛(3V/π·tan)`, a cone at the angle of repose), so a spade-load stands as a
+pile rather than spreading into an invisible film. Aim inside the hole you dug and
+placement is refused (HUD warning, red ring): this is a building sim, not a
+shuffling-the-same-dirt sim. Shovelling into a barrow standing beside you is the
+one exception to the full-shovel stop.
+
+![The shovel with a load in it](docs/screenshot-shovel.png)
 
 ## The dirt model
 
